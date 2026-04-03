@@ -1,0 +1,1629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kafka & Event-Driven Design - Interview Prep</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #0a0e1a;
+            color: #e0e0e0;
+            font-family: 'Sora', sans-serif;
+            line-height: 1.6;
+            scroll-behavior: smooth;
+        }
+
+        code, pre {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Header & Navigation */
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: linear-gradient(180deg, #0f1420 0%, #0a0e1a 100%);
+            border-bottom: 1px solid #00d4ff40;
+            backdrop-filter: blur(10px);
+            padding: 1rem 0;
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+            color: #00d4ff;
+            font-weight: 700;
+        }
+
+        .progress-container {
+            margin-bottom: 1rem;
+        }
+
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background-color: #1a1f2e;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00d4ff, #00f0ff);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
+        nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: 1rem 0 0 0;
+        }
+
+        .nav-pill {
+            padding: 0.6rem 1.2rem;
+            background-color: #1a1f2e;
+            border: 1px solid #00d4ff40;
+            border-radius: 20px;
+            color: #a0a0a0;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+        }
+
+        .nav-pill:hover {
+            border-color: #00d4ff;
+            color: #00d4ff;
+            background-color: #00d4ff10;
+        }
+
+        .nav-pill.active {
+            background-color: #00d4ff;
+            color: #0a0e1a;
+            border-color: #00d4ff;
+        }
+
+        .nav-pill.completed::after {
+            content: " ✓";
+            color: #4ade80;
+        }
+
+        /* Main Content */
+        main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+
+        .topic-section {
+            margin-bottom: 2rem;
+            scroll-margin-top: 200px;
+        }
+
+        .topic-card {
+            background: linear-gradient(135deg, #0f1420 0%, #1a1f2e 100%);
+            border: 1px solid #00d4ff20;
+            border-radius: 10px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .topic-card:hover {
+            border-color: #00d4ff40;
+            box-shadow: 0 0 20px #00d4ff15;
+        }
+
+        .topic-card summary {
+            padding: 1.5rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-weight: 600;
+            font-size: 1.2rem;
+            color: #00d4ff;
+            user-select: none;
+        }
+
+        .topic-card summary:hover {
+            background-color: #00d4ff05;
+        }
+
+        .topic-card[open] summary {
+            background-color: #00d4ff08;
+            border-bottom: 1px solid #00d4ff20;
+        }
+
+        .topic-card summary::marker {
+            color: #00d4ff;
+        }
+
+        .topic-checkbox {
+            margin-left: auto;
+            margin-right: 1rem;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .topic-content {
+            padding: 0 1.5rem 1.5rem 1.5rem;
+        }
+
+        .content-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .interview-answer {
+            background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%);
+            border-left: 4px solid #00d4ff;
+            padding: 1rem;
+            border-radius: 6px;
+            margin: 1.5rem 0;
+            font-style: italic;
+        }
+
+        .interview-answer strong {
+            color: #fbbf24;
+            font-style: normal;
+        }
+
+        ul, ol {
+            margin-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        .nested-collapsible {
+            margin: 1rem 0;
+            margin-left: 1rem;
+        }
+
+        .nested-collapsible summary {
+            padding: 0.8rem 1rem;
+            background-color: #1a1f2e;
+            border: 1px solid #00d4ff20;
+            border-radius: 6px;
+            cursor: pointer;
+            color: #00d4ff;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .nested-collapsible summary:hover {
+            background-color: #00d4ff05;
+        }
+
+        .nested-collapsible[open] summary {
+            background-color: #00d4ff08;
+            border-color: #00d4ff40;
+        }
+
+        .nested-content {
+            padding: 1rem;
+            background-color: #0f1420;
+            border-radius: 6px;
+            margin-top: 0.5rem;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+        }
+
+        thead {
+            background-color: #1a1f2e;
+        }
+
+        th {
+            padding: 0.8rem;
+            text-align: left;
+            color: #00d4ff;
+            font-weight: 700;
+            border-bottom: 2px solid #00d4ff40;
+        }
+
+        td {
+            padding: 0.8rem;
+            border-bottom: 1px solid #00d4ff15;
+        }
+
+        tbody tr:hover {
+            background-color: #00d4ff05;
+        }
+
+        /* Code & Diagrams */
+        pre {
+            background-color: #0f1420;
+            border: 1px solid #00d4ff20;
+            border-radius: 8px;
+            padding: 1rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+            color: #00ff00;
+            line-height: 1.4;
+        }
+
+        .terminal {
+            border: 1px solid #00ff0040;
+            background: #0a0e1a;
+        }
+
+        code {
+            color: #00d4ff;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.4rem;
+            }
+
+            nav {
+                gap: 0.3rem;
+            }
+
+            .nav-pill {
+                padding: 0.5rem 0.8rem;
+                font-size: 0.8rem;
+            }
+
+            .topic-card summary {
+                font-size: 1rem;
+                padding: 1rem;
+            }
+
+            .topic-content {
+                padding: 0 1rem 1rem 1rem;
+            }
+
+            table {
+                font-size: 0.8rem;
+            }
+
+            th, td {
+                padding: 0.5rem;
+            }
+
+            .interview-answer {
+                font-size: 0.95rem;
+            }
+        }
+
+        .highlight {
+            background-color: #fbbf2440;
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+            color: #fbbf24;
+        }
+
+        .keyword {
+            color: #4ade80;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>⚡ Kafka & Event-Driven Design Interview Prep</h1>
+            <div class="progress-container">
+                <div class="progress-label">
+                    <span>Progress: <strong id="progress-count">0</strong>/8 topics completed</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+                </div>
+            </div>
+            <nav id="nav-pills"></nav>
+        </div>
+    </header>
+
+    <main id="main-content"></main>
+
+    <script>
+        const topics = [
+            {
+                id: 'principles',
+                title: 'Core Principles of Event-Driven Design',
+                anchor: 'principles'
+            },
+            {
+                id: 'messaging-options',
+                title: 'Messaging Options',
+                anchor: 'messaging-options'
+            },
+            {
+                id: 'kafka-internals',
+                title: 'Kafka Internals',
+                anchor: 'kafka-internals'
+            },
+            {
+                id: 'kafka-configs',
+                title: 'Kafka Configurations',
+                anchor: 'kafka-configs'
+            },
+            {
+                id: 'delivery-semantics',
+                title: 'Delivery Semantics',
+                anchor: 'delivery-semantics'
+            },
+            {
+                id: 'performance',
+                title: 'Kafka Performance',
+                anchor: 'performance'
+            },
+            {
+                id: 'outbox-pattern',
+                title: 'Outbox Pattern',
+                anchor: 'outbox-pattern'
+            },
+            {
+                id: 'saga-pattern',
+                title: 'Saga Pattern',
+                anchor: 'saga-pattern'
+            }
+        ];
+
+        // Progress tracking
+        function updateProgress() {
+            const completed = topics.filter(t => localStorage.getItem(`topic-${t.id}`) === 'true').length;
+            document.getElementById('progress-count').textContent = completed;
+            document.getElementById('progress-fill').style.width = `${(completed / 8) * 100}%`;
+
+            // Update nav pills
+            topics.forEach(t => {
+                const pill = document.querySelector(`[data-topic="${t.id}"]`);
+                if (pill) {
+                    if (localStorage.getItem(`topic-${t.id}`) === 'true') {
+                        pill.classList.add('completed');
+                    } else {
+                        pill.classList.remove('completed');
+                    }
+                }
+            });
+        }
+
+        function toggleTopic(topicId) {
+            const isCompleted = localStorage.getItem(`topic-${topicId}`) === 'true';
+            localStorage.setItem(`topic-${topicId}`, !isCompleted);
+            updateProgress();
+        }
+
+        // Initialize nav
+        const navPills = document.getElementById('nav-pills');
+        topics.forEach((topic, idx) => {
+            const pill = document.createElement('button');
+            pill.className = 'nav-pill';
+            pill.textContent = topic.title;
+            pill.setAttribute('data-topic', topic.id);
+            pill.onclick = (e) => {
+                e.preventDefault();
+                const element = document.getElementById(`section-${topic.id}`);
+                if (element) element.scrollIntoView({ behavior: 'smooth' });
+            };
+            navPills.appendChild(pill);
+        });
+
+        // Render all sections
+        const mainContent = document.getElementById('main-content');
+
+        // 1. PRINCIPLES
+        mainContent.innerHTML += `
+            <div id="section-principles" class="topic-section">
+                <div class="topic-card">
+                    <details>
+                        <summary>
+                            Core Principles of Event-Driven Design
+                            <input type="checkbox" class="topic-checkbox" onchange="toggleTopic('principles')" />
+                        </summary>
+                        <div class="topic-content">
+                            <div class="interview-answer">
+                                <strong>Interview Answer:</strong> Event-driven architecture decouples services through asynchronous events, enabling scalability and loose coupling. Key principles include immutability of events, ordering guarantees per partition, and eventual consistency. Events represent facts about what happened, not commands—this distinction is critical. The system must handle duplicate events (idempotency), maintain clear event schema contracts, and support replaying for recovery or analysis.
+                            </div>
+
+                            <div class="content-section">
+                                <h3 style="color: #00d4ff; margin-bottom: 1rem;">8 Core Principles</h3>
+                                <ul>
+                                    <li><strong>Events as Immutable Facts:</strong> Events record what happened, not what should happen. Once published, they cannot be modified, ensuring audit trail integrity.</li>
+                                    <li><strong>Asynchronous Communication:</strong> Publishers don't wait for subscribers; enables loose coupling and independent scaling of services.</li>
+                                    <li><strong>Eventual Consistency:</strong> Systems converge to consistent state over time. Replicas may lag; plan for temporary inconsistencies.</li>
+                                    <li><strong>Event Ordering Guarantees:</strong> Total order within a partition; cross-partition order is not guaranteed. Design systems accordingly.</li>
+                                    <li><strong>Partition Key Strategy:</strong> Choice of partition key determines parallelism and ordering constraints. Same entity ID = same partition = sequential processing.</li>
+                                    <li><strong>Idempotency Requirement:</strong> Consumers must handle duplicate events (network retries, broker rebalancing). Use deduplication or idempotent operations.</li>
+                                    <li><strong>Event Schema Evolution:</strong> Support backward/forward compatibility. Use versioning or flexible serialization (Avro, Protobuf) to add/remove fields safely.</li>
+                                    <li><strong>Replay Capability:</strong> Store events immutably so systems can rebuild state by replaying from any offset. Critical for recovery and audit.</li>
+                                    <li><strong>Observability by Design:</strong> Log event metadata (source, timestamp, correlation IDs) for tracing distributed transactions and debugging.</li>
+                                    <li><strong>Temporal Decoupling:</strong> Producers and consumers need not run simultaneously. Consumers can catch up from stored events, enabling offline processing.</li>
+                                </ul>
+                            </div>
+
+                            <div class="nested-collapsible">
+                                <summary>Common Mistakes in Event-Driven Design</summary>
+                                <div class="nested-content">
+                                    <ul>
+                                        <li><span class="keyword">Dual-write without transactional guarantees:</span> Writing to database AND publishing event in two separate operations = race condition. Use Outbox Pattern instead.</li>
+                                        <li><span class="keyword">Treating events as commands:</span> Sending "CreateOrder" event implies intent, not fact. Should be "OrderCreated" after DB commit.</li>
+                                        <li><span class="keyword">Ignoring ordering constraints:</span> Assuming cross-partition events arrive in sequence; they don't. Partition key choice is critical.</li>
+                                        <li><span class="keyword">Not handling duplicates:</span> Network retries and rebalancing cause duplicate events. Consumer must be idempotent or use deduplication window.</li>
+                                        <li><span class="keyword">Tight coupling to event schema:</span> Consumers break when event fields change. Use schema registry + versioning.</li>
+                                        <li><span class="keyword">Loss of replay capability:</span> Deleting old events = losing history. Kafka retention must align with compliance/analysis needs.</li>
+                                        <li><span class="keyword">No correlation IDs:</span> Cannot trace distributed transactions across services. Include correlation/trace IDs in event payload.</li>
+                                        <li><span class="keyword">Failing to monitor lag:</span> Consumer lag growing undetected = system breakdown approaching. Monitor lag continuously.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        `;
+
+        // 2. MESSAGING OPTIONS
+        mainContent.innerHTML += `
+            <div id="section-messaging-options" class="topic-section">
+                <div class="topic-card">
+                    <details>
+                        <summary>
+                            Messaging Options
+                            <input type="checkbox" class="topic-checkbox" onchange="toggleTopic('messaging-options')" />
+                        </summary>
+                        <div class="topic-content">
+                            <div class="interview-answer">
+                                <strong>Interview Answer:</strong> Kafka excels at high-throughput, durable event streaming with replay capability and strong ordering guarantees per partition. RabbitMQ offers flexible routing and complex topologies but is message-queue-oriented with weaker replay. AWS SQS provides simplicity and integration but no ordering (standard queue) and expensive at scale. Redis Pub/Sub is in-memory, fast, but ephemeral—no persistence. Google Pub/Sub sits between: managed, scalable, with some replay via BigQuery. Choice depends on throughput needs, persistence requirements, ordering guarantees, and operational complexity tolerance.
+                            </div>
+
+                            <table style="margin: 1.5rem 0;">
+                                <thead>
+                                    <tr>
+                                        <th>Platform</th>
+                                        <th>Delivery Guarantee</th>
+                                        <th>Ordering</th>
+                                        <th>Persistence</th>
+                                        <th>Replay</th>
+                                        <th>Best For</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Kafka</strong></td>
+                                        <td>At-least-once (exactly-once with idempotence)</td>
+                                        <td>Per-partition strong ordering</td>
+                                        <td>Disk-based, configurable retention</td>
+                                        <td>Full offset-based replay</td>
+                                        <td>High-throughput event streaming, audit logs</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>RabbitMQ</strong></td>
+                                        <td>At-most-once, At-least-once (publisher confirms + consumer acks)</td>
+                                        <td>Per-queue ordering, no cross-queue guarantee</td>
+                                        <td>In-memory + disk (durable queues)</td>
+                                        <td>No native replay; messages consumed = gone</td>
+                                        <td>Complex routing, request/reply patterns, microservices RPC</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>AWS SQS</strong></td>
+                                        <td>At-least-once (standard); FIFO = exactly-once</td>
+                                        <td>No ordering (standard); FIFO = strict ordering</td>
+                                        <td>AWS managed; retention up to 14 days</td>
+                                        <td>No replay; messages deleted on consumption</td>
+                                        <td>Simple task queues, AWS ecosystem integration</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Redis Pub/Sub</strong></td>
+                                        <td>At-most-once (fire-and-forget)</td>
+                                        <td>No strict ordering</td>
+                                        <td>In-memory only; lost on restart</td>
+                                        <td>No replay capability</td>
+                                        <td>Real-time notifications, chat, live updates</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Google Pub/Sub</strong></td>
+                                        <td>At-least-once</td>
+                                        <td>Per-subscription ordering (with ordering key)</td>
+                                        <td>Google managed; 7-day default</td>
+                                        <td>Seek to timestamp or snapshot</td>
+                                        <td>GCP-native pipelines, BigQuery integration, managed service preference</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <div class="nested-collapsible">
+                                <summary>Deep Dive: Why Kafka Over Others?</summary>
+                                <div class="nested-content">
+                                    <ul>
+                                        <li><strong>Throughput:</strong> Kafka handles millions of events/sec. RabbitMQ typically peaks at tens of thousands.</li>
+                                        <li><strong>Durability:</strong> Events stored on disk indefinitely (or by policy). Support for compliance (SEC records, HIPAA logs).</li>
+                                        <li><strong>Replay:</strong> Consumers control their offset. Reprocess entire history or start fresh. RabbitMQ queues = destructive consumption.</li>
+                                        <li><strong>Partition Strategy:</strong> Natural parallelism per partition with strong ordering. Scale horizontally without sacrificing causality per entity.</li>
+                                        <li><strong>Maturity:</strong> Battle-tested at LinkedIn, Netflix, Uber, Airbnb. Vast ecosystem: Connectors, Stream processors (Kafka Streams, Flink).</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        `;
+
+        // 3. KAFKA INTERNALS
+        mainContent.innerHTML += `
+            <div id="section-kafka-internals" class="topic-section">
+                <div class="topic-card">
+                    <details>
+                        <summary>
+                            Kafka Internals
+                            <input type="checkbox" class="topic-checkbox" onchange="toggleTopic('kafka-internals')" />
+                        </summary>
+                        <div class="topic-content">
+                            <div class="interview-answer">
+                                <strong>Interview Answer:</strong> Kafka's architecture centers on topics divided into partitions, each replicated across brokers. A partition is an ordered, immutable sequence of events; replicas ensure durability. The leader handles reads/writes; in-sync replicas (ISR) are replicas caught up with leader (lag below min.insync.replicas). Offsets track position within a partition, enabling consumers to resume from any point. Brokers coordinate via ZooKeeper (pre-4.0) or KRaft (4.0+). ISR contracts guarantee that losing brokers up to (N-1) doesn't lose committed data. Rebalancing redistributes partitions across brokers during topology changes.
+                            </div>
+
+                            <div class="content-section">
+                                <h3 style="color: #00d4ff; margin-bottom: 1rem;">Key Concepts</h3>
+                                <ul>
+                                    <li><strong>Topic:</strong> A logical stream; like a table. Producers write to topics, consumers read from them.</li>
+                                    <li><strong>Partition:</strong> A topic splits into N partitions for parallelism. Each partition is a single-leader replicated log. Messages in a partition have ordering.</li>
+                                    <li><strong>Offset:</strong> Position within a partition. Incremental integer (0, 1, 2, ...). Consumer tracks committed offset to resume after restart.</li>
+                                    <li><strong>Broker:</strong> A single Kafka server node. Stores partition replicas, serves read/write requests. Identified by broker ID.</li>
+                                    <li><strong>Leader & Followers (Replicas):</strong> Each partition has 1 leader + N-1 followers. Leader handles all reads/writes. Followers replicate asynchronously.</li>
+                                    <li><strong>In-Sync Replica (ISR):</strong> A follower whose lag (difference from leader's latest offset) is ≤ <code>replica.lag.time.max.ms</code>. Only ISR replicas can become leader (prevents data loss).</li>
+                                    <li><strong>Replication Factor:</strong> Number of copies of each partition. RF=3 = 1 leader + 2 followers. Higher RF = durability, lower RF = faster writes.</li>
+                                    <li><strong>Consumer Group:</strong> Multiple consumers reading same topic + sharing offsets. Each partition assigned to one consumer in group. Enables parallel consumption.</li>
+                                </ul>
+                            </div>
+
+                            <h3 style="color: #00d4ff; margin-bottom: 1rem;">Kafka Cluster Architecture (3-Broker Example)</h3>
+                            <pre class="terminal">
+┌─────────────────────────────────────────────────────────────────┐
+│                     Kafka Cluster (3 Brokers)                   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│  │   Broker 1       │  │   Broker 2       │  │   Broker 3       │
+│  │   (ID: 0)        │  │   (ID: 1)        │  │   (ID: 2)        │
+│  ├──────────────────┤  ├──────────────────┤  ├──────────────────┤
+│  │ Topic: Orders    │  │ Topic: Orders    │  │ Topic: Orders    │
+│  │ Partition 0 [L]  │  │ Partition 0 [F]  │  │ Partition 0 [F]  │
+│  │ Offset: 0-1000   │  │ Offset: 0-998    │  │ Offset: 0-1000   │
+│  ├──────────────────┤  ├──────────────────┤  ├──────────────────┤
+│  │ Topic: Orders    │  │ Topic: Orders    │  │ Topic: Orders    │
+│  │ Partition 1 [F]  │  │ Partition 1 [L]  │  │ Partition 1 [F]  │
+│  │ Offset: 0-950    │  │ Offset: 0-950    │  │ Offset: 0-949    │
+│  ├──────────────────┤  ├──────────────────┤  ├──────────────────┤
+│  │ Topic: Orders    │  │ Topic: Orders    │  │ Topic: Orders    │
+│  │ Partition 2 [F]  │  │ Partition 2 [F]  │  │ Partition 2 [L]  │
+│  │ Offset: 0-1050   │  │ Offset: 0-1050   │  │ Offset: 0-1050   │
+│  └──────────────────┘  └──────────────────┘  └──────────────────┘
+│       ISR: [0,1,2]      ISR: [0,1,2]         ISR: [0,1,2]
+│
+│  [L] = Leader,  [F] = Follower (Replica)
+│  All followers in ISR mean RF=3 is healthy
+│
+│  ┌─────────────────────────────┐
+│  │    ZooKeeper Cluster        │
+│  │  (Or KRaft quorum in 4.0+)  │
+│  │                             │
+│  │  - Broker metadata          │
+│  │  - Leader election          │
+│  │  - ISR tracking             │
+│  │  - Controller election      │
+│  └─────────────────────────────┘
+│
+└─────────────────────────────────────────────────────────────────┘
+            </pre>
+
+                            <div class="nested-collapsible">
+                                <summary>ZooKeeper vs KRaft (Kraft)</summary>
+                                <div class="nested-content">
+                                    <table style="margin: 1rem 0;">
+                                        <thead>
+                                            <tr>
+                                                <th>Aspect</th>
+                                                <th>ZooKeeper (Pre-4.0)</th>
+                                                <th>KRaft (4.0+)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td><strong>Architecture</strong></td>
+                                                <td>External cluster; Kafka depends on it</td>
+                                                <td>Embedded in Kafka brokers (some as controllers)</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Operation</strong></td>
+                                                <td>Separate deployment, monitoring, upgrade</td>
+                                                <td>Simpler operations; fewer moving parts</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Metadata</strong></td>
+                                                <td>Stored in ZK; brokers pull on change</td>
+                                                <td>Stored in internal __cluster_metadata topic + memory</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Latency</strong></td>
+                                                <td>~100ms metadata propagation</td>
+                                                <td>Faster (~few ms) since metadata is local</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Consistency</strong></td>
+                                                <td>Eventual; brokers cache metadata</td>
+                                                <td>Raft consensus; stronger guarantees</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Scalability</strong></td>
+                                                <td>~5000 brokers; ZK becomes bottleneck</td>
+                                                <td>100,000+ brokers theoretically; no external dependency</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Controller</strong></td>
+                                                <td>Elected from brokers; uses ZK for coordination</td>
+                                                <td>Leader of KRaft quorum; built-in</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <p style="margin-top: 1rem;"><strong>KRaft Roadmap:</strong> 4.0 (KRaft production-ready), future versions will remove ZK entirely.</p>
+                                </div>
+                            </div>
+
+                            <div class="nested-collapsible">
+                                <summary>Rebalancing & Leader Election</summary>
+                                <div class="nested-content">
+                                    <ul>
+                                        <li><strong>Consumer Rebalancing:</strong> When a consumer joins/leaves a group, partitions are re-assigned. Triggered by heartbeat miss (session.timeout.ms).</li>
+                                        <li><strong>Stop-the-world:</strong> During rebalancing, consumer stops processing briefly. Minimize frequency by tuning heartbeat and max.poll.interval.ms.</li>
+                                        <li><strong>Leader Election:</strong> If leader broker crashes, KRaft/ZK chooses new leader from ISR. Failover time: ~seconds (detection + election).</li>
+                                        <li><strong>Unclean Leader Election:</strong> If no ISR available (data loss occurred), can promote out-of-sync replica (min.insync.replicas=1 risky). Default: false = prefer unavailability over data loss.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        `;
+
+        // 4. KAFKA CONFIGS
+        mainContent.innerHTML += `
+            <div id="section-kafka-configs" class="topic-section">
+                <div class="topic-card">
+                    <details>
+                        <summary>
+                            Kafka Configurations
+                            <input type="checkbox" class="topic-checkbox" onchange="toggleTopic('kafka-configs')" />
+                        </summary>
+                        <div class="topic-content">
+                            <div class="interview-answer">
+                                <strong>Interview Answer:</strong> Broker configs control replication (min.insync.replicas, default.replication.factor) and log retention (log.retention.ms, log.segment.bytes). Producer configs tune acks (durability), batching (batch.size, linger.ms), and idempotence (enable.idempotence for exactly-once). Consumer configs govern offset management (auto.offset.reset), polling behavior (max.poll.records, max.poll.interval.ms), and commit strategy (enable.auto.commit). Tuning depends on workload: low-latency = small batches; high-throughput = large batches and acks=1. Always test in production-like environment before deploying.
+                            </div>
+
+                            <h3 style="color: #00d4ff; margin-bottom: 1rem;">Broker Configurations</h3>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Config</th>
+                                        <th>Default</th>
+                                        <th>Recommended</th>
+                                        <th>What It Does</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>num.network.threads</code></td>
+                                        <td>8</td>
+                                        <td>8-16 (# of cores)</td>
+                                        <td>Threads handling network requests. Scale with CPU cores.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>num.io.threads</code></td>
+                                        <td>8</td>
+                                        <td>8-16 (# of cores)</td>
+                                        <td>Threads handling disk I/O. Bottleneck if too low.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>socket.receive.buffer.bytes</code></td>
+                                        <td>102400 (100KB)</td>
+                                        <td>102400-524288 (100KB-512KB)</td>
+                                        <td>TCP receive buffer per socket. High throughput needs higher value.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>min.insync.replicas</code></td>
+                                        <td>1 (risky!)</td>
+                                        <td>2 (for RF=3)</td>
+                                        <td>Min replicas in ISR before acks. RF=3, min.isr=2 prevents data loss.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>default.replication.factor</code></td>
+                                        <td>1 (risky!)</td>
+                                        <td>3</td>
+                                        <td>Default RF for new topics. Always use 3 for production.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>log.retention.ms</code></td>
+                                        <td>604800000 (7 days)</td>
+                                        <td>Depends on storage; 30 days typical</td>
+                                        <td>How long to retain events before deletion. Set per topic to override.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <h3 style="color: #00d4ff; margin: 2rem 0 1rem 0;">Producer Configurations</h3>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Config</th>
+                                        <th>Default</th>
+                                        <th>Recommended</th>
+                                        <th>Impact on Behavior</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>acks</code></td>
+                                        <td>1</td>
+                                        <td>all (or -1)</td>
+                                        <td><span class="highlight">Durability lever.</span> 0=no acks; 1=leader ack (risky); all=leader + all ISR ack (safe but slower).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>retries</code></td>
+                                        <td>2147483647</td>
+                                        <td>INT_MAX (infinite)</td>
+                                        <td>Retry failed sends indefinitely. Pair with retry.backoff.ms to avoid hammering broker.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>enable.idempotence</code></td>
+                                        <td>true (4.0+)</td>
+                                        <td>true</td>
+                                        <td>Enable producer idempotence. Requires acks=all. Ensures exactly-once semantics.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>batch.size</code></td>
+                                        <td>16384 (16KB)</td>
+                                        <td>16384-32768</td>
+                                        <td>Batch size in bytes. Larger = better compression & throughput, more latency.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>linger.ms</code></td>
+                                        <td>0</td>
+                                        <td>10-100 (high throughput); 1-5 (low latency)</td>
+                                        <td>Wait time before sending partial batch. Trade latency for batching efficiency.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>compression.type</code></td>
+                                        <td>none</td>
+                                        <td>snappy or lz4</td>
+                                        <td>Compress batch on send. Reduces network + storage, minimal CPU overhead.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>max.in.flight.requests.per.connection</code></td>
+                                        <td>5</td>
+                                        <td>5 (with idempotence), 1-2 (without)</td>
+                                        <td>Concurrent in-flight requests. High value risks out-of-order delivery. Idempotence + 5 = safe.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <h3 style="color: #00d4ff; margin: 2rem 0 1rem 0;">Consumer Configurations</h3>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Config</th>
+                                        <th>Default</th>
+                                        <th>Recommended</th>
+                                        <th>Impact on Behavior</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>group.id</code></td>
+                                        <td>Required</td>
+                                        <td>Unique per consumer group</td>
+                                        <td>Consumer group identifier. Determines offset isolation and partition assignment.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>auto.offset.reset</code></td>
+                                        <td>latest</td>
+                                        <td>earliest (replay), latest (new consumer)</td>
+                                        <td>Where to start if no committed offset. earliest = from beginning; latest = only new messages.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>enable.auto.commit</code></td>
+                                        <td>true</td>
+                                        <td>false (manual commit)</td>
+                                        <td><span class="highlight">Critical for correctness.</span> auto = risk data loss if process crashes before processing. Manual = at-least-once guarantee.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>auto.commit.interval.ms</code></td>
+                                        <td>5000 (5 sec)</td>
+                                        <td>N/A if manual</td>
+                                        <td>Interval between auto-commits. High = fewer commits, more reprocessing; low = higher overhead.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>max.poll.records</code></td>
+                                        <td>500</td>
+                                        <td>100-500 (tune to processing time)</td>
+                                        <td>Max events fetched per poll(). Too high = long processing, session timeout risk.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>session.timeout.ms</code></td>
+                                        <td>45000 (45 sec)</td>
+                                        <td>45000 (tune per environment)</td>
+                                        <td>Broker waits before removing inactive consumer. Long = slow rebalance; short = sensitive to GC.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <div class="nested-collapsible">
+                                <summary>Producer: Throughput vs Latency Tuning</summary>
+                                <div class="nested-content">
+                                    <h4 style="color: #fbbf24; margin-bottom: 0.5rem;">High Throughput (millions/sec):</h4>
+                                    <ul>
+                                        <li><code>acks=1</code> or <code>acks=all</code> with async callbacks (fire-and-forget after callback)</li>
+                                        <li><code>batch.size=32KB</code>, <code>linger.ms=100</code></li>
+                                        <li><code>compression.type=snappy</code></li>
+                                        <li><code>enable.idempotence=true</code>, <code>max.in.flight.requests=5</code></li>
+                                    </ul>
+                                    <h4 style="color: #fbbf24; margin-bottom: 0.5rem; margin-top: 1rem;">Low Latency (sub-100ms):</h4>
+                                    <ul>
+                                        <li><code>acks=all</code> with sync send</li>
+                                        <li><code>batch.size=16KB</code>, <code>linger.ms=1-10</code></li>
+                                        <li><code>compression.type=none</code> (overhead not worth it)</li>
+                                        <li><code>enable.idempotence=true</code> for safety</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="nested-collapsible">
+                                <summary>Consumer: Manual Commit Example</summary>
+                                <div class="nested-content">
+                                    <pre style="background-color: #0f1420; color: #4ade80;">
+while (true) {
+  ConsumerRecords&lt;String, String&gt; records =
+    consumer.poll(Duration.ofMillis(100));
+
+  for (ConsumerRecord&lt;String, String&gt; record : records) {
+    // Process the message
+    processMessage(record);
+  }
+
+  // Only commit after successful processing
+  // Risk window: if process crashes between
+  // processing and commit, messages reprocessed
+  consumer.commitSync();
+}
+                                    </pre>
+                                    <p style="margin-top: 1rem;">This pattern ensures at-least-once delivery. If processing takes long, tune <code>max.poll.interval.ms</code> to avoid timeout.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        `;
+
+        // 5. DELIVERY SEMANTICS
+        mainContent.innerHTML += `
+            <div id="section-delivery-semantics" class="topic-section">
+                <div class="topic-card">
+                    <details>
+                        <summary>
+                            Delivery Semantics
+                            <input type="checkbox" class="topic-checkbox" onchange="toggleTopic('delivery-semantics')" />
+                        </summary>
+                        <div class="topic-content">
+                            <div class="interview-answer">
+                                <strong>Interview Answer:</strong> At-most-once (acks=0) risks data loss but is fast; at-least-once (acks=all, disable auto-commit) guarantees delivery but requires idempotent consumers; exactly-once (producer idempotence + transactional writes/reads) guarantees single processing. Exactly-once with Kafka Streams handles both exactly-once source → broker and consumer → sink. The cost is complexity and latency. Most systems use at-least-once + idempotent consumers because exactly-once has hidden costs. Always design consumers to handle duplicates gracefully.
+                            </div>
+
+                            <table style="margin: 1.5rem 0;">
+                                <thead>
+                                    <tr>
+                                        <th>Semantic</th>
+                                        <th>Producer Config</th>
+                                        <th>Consumer Config</th>
+                                        <th>How It Works</th>
+                                        <th>Trade-off</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><strong>At-Most-Once</strong></td>
+                                        <td><code>acks=0</code></td>
+                                        <td><code>enable.auto.commit=true</code></td>
+                                        <td>Producer doesn't wait for ack. Consumer auto-commits before processing. Network/process crash = data lost.</td>
+                                        <td>Fastest; data loss risk. Use for metrics, non-critical logs.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>At-Least-Once</strong></td>
+                                        <td><code>acks=all</code>, <code>retries=∞</code></td>
+                                        <td><code>enable.auto.commit=false</code>, manual commit after processing</td>
+                                        <td>Producer waits for all ISR acks. Consumer commits after processing. Process crash before commit = message reprocessed.</td>
+                                        <td>Data safe; requires idempotent consumer. Most common.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Exactly-Once</strong></td>
+                                        <td><code>enable.idempotence=true</code>, <code>acks=all</code></td>
+                                        <td><code>isolation.level=read_committed</code>, transactional writes</td>
+                                        <td>Producer deduplicates via sequence numbers. Consumer reads only committed messages. Transactions span input → output. Requires application-level dedup or database upsert.</td>
+                                        <td>Complex; high latency; overhead. For critical operations (payment, billing).</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <div class="nested-collapsible">
+                                <summary>Exactly-Once in Detail</summary>
+                                <div class="nested-content">
+                                    <h4 style="color: #fbbf24; margin-bottom: 0.5rem;">Producer Idempotence:</h4>
+                                    <ul>
+                                        <li>Broker tracks (producer-id, sequence-number) for deduplication within 5 minutes (configurable).</li>
+                                        <li><code>enable.idempotence=true</code> + <code>acks=all</code> = safe retry semantics.</li>
+                                        <li>If producer resends with same sequence number, broker ignores duplicate.</li>
+                                    </ul>
+                                    <h4 style="color: #fbbf24; margin-bottom: 0.5rem; margin-top: 1rem;">Consumer Idempotence:</h4>
+                                    <ul>
+                                        <li>Broker ensures deduplication; consumer must handle duplicates in case of reprocessing.</li>
+                                        <li><strong>Deduplication strategies:</strong>
+                                            <ul style="margin-left: 1rem; margin-top: 0.5rem;">
+                                                <li>Database upsert (INSERT ... ON CONFLICT DO NOTHING / UPDATE)</li>
+                                                <li>Deduplication cache with TTL (Redis, in-memory map)</li>
+                                                <li>Message ID in transactional system (Idempotency key pattern)</li>
+                                            </ul>
+                                        </li>
+                                    </ul>
+                                    <h4 style="color: #fbbf24; margin-bottom: 0.5rem; margin-top: 1rem;">Example: Database Upsert (Idempotent):</h4>
+                                    <pre style="background-color: #0f1420; color: #4ade80;">
+-- Exactly-once pattern: Event ID ensures single insert
+INSERT INTO orders (event_id, customer_id, amount, created_at)
+VALUES (\${eventId}, \${customerId}, \${amount}, NOW())
+ON CONFLICT (event_id) DO NOTHING;  -- Idempotent
+
+-- Or use event_id in WHERE clause:
+UPDATE accounts SET balance = balance + \${amount}
+WHERE customer_id = \${customerId}
+AND NOT EXISTS (
+  SELECT 1 FROM processed_events
+  WHERE event_id = \${eventId}
+);
+INSERT INTO processed_events (event_id) VALUES (\${eventId});
+                                    </pre>
+                                </div>
+                            </div>
+
+                            <div class="nested-collapsible">
+                                <summary>Kafka Transactions (Read Committed)</summary>
+                                <div class="nested-content">
+                                    <ul>
+                                        <li><code>isolation.level=read_committed</code> = consumer only sees committed events.</li>
+                                        <li>Producer writes to transaction within 60-second timeout (configurable).</li>
+                                        <li>If producer crashes mid-transaction, events are aborted and never visible to consumers.</li>
+                                        <li><strong>Use case:</strong> Multi-partition atomic writes (e.g., debit one partition, credit another).</li>
+                                        <li><strong>Cost:</strong> ~10-30% latency penalty + memory overhead on brokers.</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="nested-collapsible">
+                                <summary>Common Pitfalls</summary>
+                                <div class="nested-content">
+                                    <ul>
+                                        <li><span class="keyword">Auto-commit + no deduplication:</span> At-most-once behavior; data loss possible if process dies before commit.</li>
+                                        <li><span class="keyword">Forgetting producer retries:</span> acks=all but retries=0 = data loss on transient network errors.</li>
+                                        <li><span class="keyword">Not handling offset reset:</span> Consumer crashes, offset commit delayed, offset expires. Restart with auto.offset.reset=latest = skip backlog.</li>
+                                        <li><span class="keyword">Assuming exactly-once is free:</span> Deduplication overhead, slower, complex. Use at-least-once + idempotence unless critical.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        `;
+
+        // 6. PERFORMANCE
+        mainContent.innerHTML += `
+            <div id="section-performance" class="topic-section">
+                <div class="topic-card">
+                    <details>
+                        <summary>
+                            Kafka Performance
+                            <input type="checkbox" class="topic-checkbox" onchange="toggleTopic('performance')" />
+                        </summary>
+                        <div class="topic-content">
+                            <div class="interview-answer">
+                                <strong>Interview Answer:</strong> Throughput scales linearly with partition count; each partition can be consumed by one consumer in a group. Latency increases with batch.size and linger.ms on producer, and max.poll.records on consumer. Partition count formula: partitions = max(expected throughput / producer throughput per partition, max parallelism needed). Monitor consumer lag continuously; lag > 0 means consumers lag behind, lag growth = undersized. High lag diagnostics: check consumer processing time (max.poll.interval.ms), network latency, GC pauses, and broker saturation. Always tune with production traffic patterns in mind.
+                            </div>
+
+                            <h3 style="color: #00d4ff; margin-bottom: 1rem;">Throughput vs Latency Trade-offs</h3>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Metric</th>
+                                        <th>High Throughput Config</th>
+                                        <th>Low Latency Config</th>
+                                        <th>Impact</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>batch.size</code></td>
+                                        <td>32KB</td>
+                                        <td>16KB or less</td>
+                                        <td>Larger batches amortize overhead; smaller = faster send.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>linger.ms</code></td>
+                                        <td>50-100</td>
+                                        <td>1-5</td>
+                                        <td>Wait for batch vs send immediately. Trade latency for batching.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>compression.type</code></td>
+                                        <td>snappy (fast) or lz4</td>
+                                        <td>none</td>
+                                        <td>Compression saves network/storage (~50% reduction), costs CPU/latency.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>acks</code></td>
+                                        <td>1 (or async)</td>
+                                        <td>all (or 1 if durability acceptable)</td>
+                                        <td>acks=0 fastest (risky); acks=1 medium; acks=all safest (slowest).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>num.io.threads</code></td>
+                                        <td>16+ (matches disk I/O capacity)</td>
+                                        <td>8 (standard)</td>
+                                        <td>More threads = parallelism, but context switch overhead.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <h3 style="color: #00d4ff; margin: 2rem 0 1rem 0;">Partition Math</h3>
+                            <pre style="background-color: #0f1420; color: #fbbf24; padding: 1.5rem; border-radius: 8px; font-weight: 600;">
+Number of Partitions = MAX(
+  Throughput Target / Throughput per Partition,
+  Max Parallelism Needed
+)
+
+Example:
+- Target: 1,000,000 events/sec
+- Throughput per partition (single consumer): 100,000 events/sec
+- Max consumers available: 8
+
+Partitions = MAX(1,000,000 / 100,000, 8) = MAX(10, 8) = 10
+
+Reality check: 10 partitions, 8 consumers = 8 active, 2 idle.
+Consider 12 partitions to distribute load evenly and add headroom.
+            </pre>
+
+                            <h3 style="color: #00d4ff; margin: 2rem 0 1rem 0;">Consumer Lag Monitoring</h3>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Lag Level</th>
+                                        <th>Definition</th>
+                                        <th>Alert Threshold</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Healthy</strong></td>
+                                        <td>Lag < 1000 events or < 5 seconds</td>
+                                        <td>N/A</td>
+                                        <td>Monitor; no action needed.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Warning</strong></td>
+                                        <td>Lag 1000-100K events or lag growing</td>
+                                        <td>Lag > 10K or lag growth > 10%/min</td>
+                                        <td>Investigate processing time; check for slow consumers or GC pauses.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Critical</strong></td>
+                                        <td>Lag > 100K events or 5+ minutes behind</td>
+                                        <td>Lag > 1M or lag growing exponentially</td>
+                                        <td>Scale consumers (add more replicas); check broker health; verify network latency.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <div class="nested-collapsible">
+                                <summary>Diagnosing High Consumer Lag</summary>
+                                <div class="nested-content">
+                                    <h4 style="color: #fbbf24; margin-bottom: 0.5rem;">Step 1: Verify Lag Calculation</h4>
+                                    <ul>
+                                        <li>Lag = (partition high water mark) - (consumer committed offset)</li>
+                                        <li>Check via: <code>kafka-consumer-groups --describe --group my-group</code></li>
+                                    </ul>
+                                    <h4 style="color: #fbbf24; margin-bottom: 0.5rem; margin-top: 1rem;">Step 2: Check Consumer Processing Time</h4>
+                                    <ul>
+                                        <li>Is <code>max.poll.interval.ms</code> exceeded? Consumer taking too long per batch.</li>
+                                        <li>Check logs for slow database queries, external API calls, or blocking I/O.</li>
+                                    </ul>
+                                    <h4 style="color: #fbbf24; margin-bottom: 0.5rem; margin-top: 1rem;">Step 3: Assess Consumer Parallelism</h4>
+                                    <ul>
+                                        <li>Number of active consumers < number of partitions? Underutilized.</li>
+                                        <li>Each partition can be consumed by only one consumer in a group.</li>
+                                        <li>Add more consumer instances (up to partition count) to increase parallelism.</li>
+                                    </ul>
+                                    <h4 style="color: #fbbf24; margin-bottom: 0.5rem; margin-top: 1rem;">Step 4: Check Broker Health</h4>
+                                    <ul>
+                                        <li>High broker CPU, disk utilization, or network saturation?</li>
+                                        <li>Rebalancing in progress (check broker logs)? Temporarily slows consumption.</li>
+                                        <li>ISR shrinking? (some replicas out of sync.) Indicates broker overload or network issues.</li>
+                                    </ul>
+                                    <h4 style="color: #fbbf24; margin-bottom: 0.5rem; margin-top: 1rem;">Step 5: Profile Consumer Code</h4>
+                                    <ul>
+                                        <li>CPU flame graph: Is processing CPU-bound or I/O-bound?</li>
+                                        <li>GC pauses: Long pauses cause session timeout risk. Tune JVM memory.</li>
+                                        <li>Thread pool saturation: If using thread pool for async processing, queue depth growing?</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="nested-collapsible">
+                                <summary>Producer Performance Tuning</summary>
+                                <div class="nested-content">
+                                    <pre style="background-color: #0f1420; color: #4ade80;">
+// Scenario: Need 1M events/sec with < 50ms latency
+
+ProducerConfig config = new ProducerConfig();
+config.put("acks", "all");  // Durability
+config.put("retries", Integer.MAX_VALUE);
+config.put("enable.idempotence", true);
+config.put("batch.size", 16384);  // Start small for latency
+config.put("linger.ms", 10);  // Wait 10ms to batch
+config.put("compression.type", "snappy");
+config.put("buffer.memory", 67108864);  // 64MB
+config.put("max.in.flight.requests.per.connection", 5);
+
+// Launch multiple producer threads
+for (int i = 0; i < 16; i++) {
+  executor.submit(() -> {
+    try (Producer&lt;String, String&gt; producer = new KafkaProducer&lt;&gt;(config)) {
+      // Each thread sends to Kafka
+      producer.send(record, callback);
+    }
+  });
+}
+                                    </pre>
+                                    <p style="margin-top: 1rem;"><strong>Key tuning:</strong> Multiple producer instances (threads) amortize network round-trips. 16 producers * 100K events/sec per producer = 1.6M throughput possible.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        `;
+
+        // 7. OUTBOX PATTERN
+        mainContent.innerHTML += `
+            <div id="section-outbox-pattern" class="topic-section">
+                <div class="topic-card">
+                    <details>
+                        <summary>
+                            Outbox Pattern
+                            <input type="checkbox" class="topic-checkbox" onchange="toggleTopic('outbox-pattern')" />
+                        </summary>
+                        <div class="topic-content">
+                            <div class="interview-answer">
+                                <strong>Interview Answer:</strong> The Outbox Pattern solves the dual-write problem: ensure atomic updates to database AND Kafka event publishing. Instead of two operations, insert both database change and event into the same transaction. A background poller reads from the outbox table and publishes to Kafka, then marks as sent. This guarantees no lost or duplicate events. Alternative: use Change Data Capture (CDC) to stream database logs directly. Outbox is simpler to implement; CDC is more elegant but requires additional infrastructure.
+                            </div>
+
+                            <h3 style="color: #00d4ff; margin-bottom: 1rem;">Problem: The Dual-Write Dilemma</h3>
+                            <pre class="terminal">
+// ANTI-PATTERN: Two separate operations = race condition
+BEGIN;
+  UPDATE orders SET status = 'paid' WHERE id = 123;
+COMMIT;
+
+// What if process crashes here?
+kafkaProducer.send(new ProducerRecord("orders",
+  "OrderPaid", "{orderId: 123, amount: 100}"));
+
+// Result: DB updated, but event never published.
+// Other services never learn about state change.
+            </pre>
+
+                            <h3 style="color: #00d4ff; margin: 2rem 0 1rem 0;">Solution: Outbox + Polling</h3>
+                            <pre class="terminal">
+┌──────────────────────────────────────────────────────────────┐
+│                      Application Service                     │
+└──────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                    ┌─────────────────────┐
+                    │ DB Transaction      │
+                    ├─────────────────────┤
+                    │ orders table        │
+                    │ outbox table        │  ← All in same TX
+                    └─────────────────────┘
+                              │
+          ┌───────────────────┴───────────────────┐
+          ▼                                       ▼
+  ┌──────────────────┐              ┌─────────────────────┐
+  │ orders_paid      │              │ outbox table:       │
+  │ id=123, paid=Y   │              │ - id                │
+  └──────────────────┘              │ - event_type        │
+                                    │ - payload           │
+                                    │ - published_at      │
+                                    │ - is_published      │
+                                    └─────────────────────┘
+                              │
+                    ┌─────────▼──────────┐
+                    │  Outbox Poller     │
+                    │  (background task) │
+                    └────────┬───────────┘
+                             │
+                    ┌────────▼──────────┐
+                    │ Kafka Topic:       │
+                    │ "order-events"     │
+                    └─────────────────────┘
+            </pre>
+
+                            <h3 style="color: #00d4ff; margin: 2rem 0 1rem 0;">Outbox Implementation Flow</h3>
+                            <table style="margin: 1.5rem 0;">
+                                <thead>
+                                    <tr>
+                                        <th>Step</th>
+                                        <th>Action</th>
+                                        <th>Code Conceptual</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><strong>1. Atomic Insert</strong></td>
+                                        <td>Update orders table + insert outbox row in same TX</td>
+                                        <td><code>INSERT INTO outbox (event_type, payload, created_at) VALUES (...)</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>2. Poll Outbox</strong></td>
+                                        <td>Background poller queries unpublished rows (is_published=false)</td>
+                                        <td><code>SELECT * FROM outbox WHERE is_published=false ORDER BY id LIMIT 100</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>3. Publish to Kafka</strong></td>
+                                        <td>Send batch of events to Kafka with acks=all (idempotent)</td>
+                                        <td><code>kafkaProducer.send(record)</code> for each row</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>4. Mark Published</strong></td>
+                                        <td>On success, update outbox: is_published=true, published_at=NOW()</td>
+                                        <td><code>UPDATE outbox SET is_published=true WHERE id IN (...)</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>5. Clean Up</strong></td>
+                                        <td>Periodically delete old published rows (archive if needed)</td>
+                                        <td><code>DELETE FROM outbox WHERE is_published=true AND published_at < NOW() - INTERVAL 7 DAYS</code></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <div class="nested-collapsible">
+                                <summary>Outbox Schema Example</summary>
+                                <div class="nested-content">
+                                    <pre style="background-color: #0f1420; color: #4ade80;">
+CREATE TABLE outbox (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  event_type VARCHAR(100) NOT NULL,
+  aggregate_id VARCHAR(100) NOT NULL,  -- FK to orders.id
+  payload JSON NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  published_at TIMESTAMP NULL,
+  is_published BOOLEAN DEFAULT FALSE,
+  retry_count INT DEFAULT 0,
+  last_error VARCHAR(500),
+
+  INDEX idx_published (is_published, created_at),
+  INDEX idx_aggregate (aggregate_id)
+);
+
+-- Example row:
+-- id=1001, event_type="OrderPaid", aggregate_id="123",
+-- payload='{"orderId": 123, "customerId": 456, "amount": 100, "currency": "USD"}',
+-- created_at='2026-04-03 10:00:00', published_at=NULL, is_published=false
+                                    </pre>
+                                </div>
+                            </div>
+
+                            <div class="nested-collapsible">
+                                <summary>Pros & Cons</summary>
+                                <div class="nested-content">
+                                    <h4 style="color: #4ade80; margin-bottom: 0.5rem;">Pros:</h4>
+                                    <ul>
+                                        <li>Guaranteed atomicity: DB change + event in same transaction.</li>
+                                        <li>No data loss: If poller fails, events stay in outbox until successfully published.</li>
+                                        <li>Simple to implement: Standard SQL, easy to debug (query outbox table).</li>
+                                        <li>Idempotent by design: Publishing same outbox row twice = idempotent event (partition key = aggregate_id).</li>
+                                    </ul>
+                                    <h4 style="color: #fbbf24; margin-bottom: 0.5rem; margin-top: 1rem;">Cons:</h4>
+                                    <ul>
+                                        <li>Eventual consistency: Events published asynchronously; lag between state change and event.</li>
+                                        <li>Database load: Outbox table grows; cleanup needed or it becomes a bottleneck.</li>
+                                        <li>Poller tuning: Poll frequency affects latency; too frequent = CPU overhead.</li>
+                                        <li>Not global ordering: Multiple services with outboxes = no global event order (use correlation IDs).</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="nested-collapsible">
+                                <summary>Alternative: Change Data Capture (CDC)</summary>
+                                <div class="nested-content">
+                                    <p>Instead of polling outbox table, stream database transaction log directly:</p>
+                                    <ul>
+                                        <li><strong>Tool:</strong> Debezium (captures PostgreSQL WAL, MySQL binlog, MongoDB oplog)</li>
+                                        <li><strong>Flow:</strong> DB write → Debezium → Kafka topic → downstream services</li>
+                                        <li><strong>Advantage:</strong> No poller overhead; real-time event streaming.</li>
+                                        <li><strong>Disadvantage:</strong> Requires separate Debezium infrastructure; more operational complexity.</li>
+                                    </ul>
+                                    <p style="margin-top: 1rem;"><strong>When to use CDC:</strong> Existing data warehouse pipelines, high-scale deployments with mature infrastructure, or when you need real-time change capture for analytics.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        `;
+
+        // 8. SAGA PATTERN
+        mainContent.innerHTML += `
+            <div id="section-saga-pattern" class="topic-section">
+                <div class="topic-card">
+                    <details>
+                        <summary>
+                            Saga Pattern
+                            <input type="checkbox" class="topic-checkbox" onchange="toggleTopic('saga-pattern')" />
+                        </summary>
+                        <div class="topic-content">
+                            <div class="interview-answer">
+                                <strong>Interview Answer:</strong> Sagas coordinate multi-step transactions across services when distributed transactions are infeasible. Choreography: each service listens to events and fires compensating transactions on failure (loose coupling, harder to debug). Orchestration: a central saga coordinator manages steps and handles rollback (centralized control, easier to visualize, but coordination bottleneck). Both require idempotent services and compensating transactions for rollback. Choose choreography for independent services; choose orchestration for complex flows with many dependencies.
+                            </div>
+
+                            <h3 style="color: #00d4ff; margin-bottom: 1rem;">Saga Pattern Overview</h3>
+                            <p style="margin-bottom: 1rem;">Distributed transaction across multiple services/databases. Example: OrderService → PaymentService → InventoryService. If any step fails, undo previous steps.</p>
+
+                            <h3 style="color: #00d4ff; margin: 2rem 0 1rem 0;">Pattern 1: Choreography (Event-Driven)</h3>
+                            <pre class="terminal">
+1. OrderService creates order
+   └─► Event: OrderCreated
+
+2. PaymentService listens to OrderCreated
+   ├─► Charges customer
+   └─► Event: PaymentProcessed
+
+3. InventoryService listens to PaymentProcessed
+   ├─► Reserves stock
+   └─► Event: StockReserved
+
+4. ShippingService listens to StockReserved
+   ├─► Plans shipment
+   └─► Event: ShipmentPlanned
+
+Failure Case: PaymentService fails to charge
+   ├─► Event: PaymentFailed
+   └─► OrderService, InventoryService, ShippingService
+       listen and compensate (cancel order, release reserved stock, etc.)
+
+Services are loosely coupled via events.
+No central coordinator.
+            </pre>
+
+                            <h3 style="color: #00d4ff; margin: 2rem 0 1rem 0;">Pattern 2: Orchestration (Central Coordinator)</h3>
+                            <pre class="terminal">
+┌────────────────────────────────────┐
+│    OrderSagaOrchestrator           │
+│  (State Machine / Workflow Engine) │
+└────────────────────────────────────┘
+        │
+        ├─ Step 1: Create Order
+        │   └─► OrderService.createOrder(...)
+        │       └─► Wait for response
+        │
+        ├─ Step 2: Process Payment
+        │   └─► PaymentService.charge(...)
+        │       └─► Wait for response
+        │
+        ├─ Step 3: Reserve Inventory
+        │   └─► InventoryService.reserve(...)
+        │       └─► Wait for response
+        │
+        └─ Step 4: Plan Shipment
+            └─► ShippingService.ship(...)
+                └─► Wait for response
+
+Failure at Step 3: Orchestrator triggers compensations
+    ├─ Rollback Step 2: PaymentService.refund(...)
+    └─ Rollback Step 1: OrderService.cancel(...)
+
+Orchestrator has full visibility and control.
+Tight coupling on orchestrator.
+            </pre>
+
+                            <h3 style="color: #00d4ff; margin: 2rem 0 1rem 0;">Choreography vs Orchestration</h3>
+                            <table style="margin: 1.5rem 0;">
+                                <thead>
+                                    <tr>
+                                        <th>Aspect</th>
+                                        <th>Choreography</th>
+                                        <th>Orchestration</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Coupling</strong></td>
+                                        <td>Loose; services don't know about others</td>
+                                        <td>Tight on orchestrator; but services decoupled</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Control Flow</strong></td>
+                                        <td>Distributed; each service decides next step</td>
+                                        <td>Centralized; orchestrator commands steps</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Debugging</strong></td>
+                                        <td>Hard; flow scattered across services</td>
+                                        <td>Easy; orchestrator logs all steps</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Scalability</strong></td>
+                                        <td>Horizontal; no central bottleneck</td>
+                                        <td>Orchestrator can become bottleneck</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Testability</strong></td>
+                                        <td>Complex; need event mocks</td>
+                                        <td>Simple; mock service responses</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Use Case</strong></td>
+                                        <td>Independent workflows (order, user signup)</td>
+                                        <td>Complex flows with many steps (payment + shipping + inventory)</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <div class="nested-collapsible">
+                                <summary>Compensating Transactions</summary>
+                                <div class="nested-content">
+                                    <h4 style="color: #fbbf24; margin-bottom: 0.5rem;">Definition:</h4>
+                                    <p>A compensating transaction undoes a previous operation. Not a rollback (no DB transaction); semantic undo.</p>
+                                    <h4 style="color: #fbbf24; margin-bottom: 0.5rem; margin-top: 1rem;">Examples:</h4>
+                                    <ul>
+                                        <li><strong>Debit account:</strong> Compensating action = Credit account</li>
+                                        <li><strong>Reserve inventory:</strong> Compensating action = Release reservation</li>
+                                        <li><strong>Send email:</strong> No compensating action (can't unsend); idempotency key prevents duplicates</li>
+                                        <li><strong>Create order:</strong> Compensating action = Cancel order (mark as cancelled, not delete)</li>
+                                    </ul>
+                                    <h4 style="color: #fbbf24; margin-bottom: 0.5rem; margin-top: 1rem;">Key Rules:</h4>
+                                    <ul>
+                                        <li>Compensating actions must be <span class="keyword">idempotent</span>; if refund is retried, second refund must have no effect.</li>
+                                        <li>Store compensation history (saga execution log) for audit and replay.</li>
+                                        <li>Some operations have <span class="keyword">no compensation</span> (e.g., sending emails); plan accordingly.</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="nested-collapsible">
+                                <summary>Orchestration Implementation Example (Pseudo-code)</summary>
+                                <div class="nested-content">
+                                    <pre style="background-color: #0f1420; color: #4ade80;">
+class OrderSaga {
+  async execute(orderId) {
+    const saga = new SagaExecution(orderId);
+
+    try {
+      // Step 1: Create order
+      const order = await OrderService.createOrder(orderId);
+      saga.log("CreateOrder", "SUCCESS", order);
+
+      // Step 2: Process payment
+      const payment = await PaymentService.charge(order.customerId, order.total);
+      saga.log("Charge", "SUCCESS", payment);
+
+      // Step 3: Reserve inventory
+      const reservation = await InventoryService.reserve(order.items);
+      saga.log("Reserve", "SUCCESS", reservation);
+
+      // Step 4: Plan shipment
+      const shipment = await ShippingService.ship(order.id, order.address);
+      saga.log("Ship", "SUCCESS", shipment);
+
+      // All steps succeeded
+      saga.markCompleted();
+
+    } catch (error) {
+      // Rollback in reverse order
+      saga.log(currentStep, "FAILED", error);
+
+      // Undo Step 3
+      if (saga.isCompleted("Reserve")) {
+        await InventoryService.cancelReservation(reservationId);
+      }
+
+      // Undo Step 2
+      if (saga.isCompleted("Charge")) {
+        await PaymentService.refund(paymentId);
+      }
+
+      // Undo Step 1
+      if (saga.isCompleted("CreateOrder")) {
+        await OrderService.cancelOrder(orderId);
+      }
+
+      saga.markRolledBack();
+      throw error;
+    }
+  }
+}
+
+// Idempotency check in each service:
+async charge(customerId, amount) {
+  const idempotencyKey = \`\${customerId}-\${orderId}-\${timestamp}\`;
+  const existing = await db.query("SELECT * FROM payments WHERE idempotency_key = ?", [idempotencyKey]);
+
+  if (existing) {
+    return existing;  // Duplicate request; return cached result
+  }
+
+  const result = await paymentGateway.charge(customerId, amount);
+  await db.insert("payments", { idempotencyKey, result });
+  return result;
+}
+                                    </pre>
+                                </div>
+                            </div>
+
+                            <div class="nested-collapsible">
+                                <summary>Common Pitfalls</summary>
+                                <div class="nested-content">
+                                    <ul>
+                                        <li><span class="keyword">Not handling compensation failure:</span> What if refund fails after charge? Service must retry compensation (with backoff) or alert ops.</li>
+                                        <li><span class="keyword">Idempotency missing:</span> Network retry causes duplicate charge. Each service must use idempotency keys.</li>
+                                        <li><span class="keyword">No visibility:</span> Saga stuck in middle of transaction; no way to know which step failed. Log all saga steps.</li>
+                                        <li><span class="keyword">Tight coupling in choreography:</span> Every service knows about every event; hard to add new services.</li>
+                                        <li><span class="keyword">Orchestrator bottleneck:</span> Central coordinator single point of failure. Use redundancy + failover.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        `;
+
+        // Initialize UI
+        updateProgress();
+    </script>
+</body>
+</html>

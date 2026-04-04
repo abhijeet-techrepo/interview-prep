@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event-Driven Design — Revision Mind Map</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
+    <style>
+        :root {
+            --bg: #faf9f7; --canvas-bg: #f5f3ef; --text: #1a1a2e; --text-muted: #6b7280;
+            --border: #e5e2db; --card-bg: #ffffff;
+            --shadow: 0 2px 12px rgba(0,0,0,0.08); --shadow-hover: 0 8px 30px rgba(0,0,0,0.12);
+            --c0: #e74c3c; --c0-bg: #fdf2f2; --c0-border: #f5c6cb;
+            --c1: #e67e22; --c1-bg: #fef5e7; --c1-border: #fad7a0;
+            --c2: #27ae60; --c2-bg: #eafaf1; --c2-border: #a9dfbf;
+            --c3: #2980b9; --c3-bg: #ebf5fb; --c3-border: #aed6f1;
+            --c4: #8e44ad; --c4-bg: #f5eef8; --c4-border: #d2b4de;
+            --c5: #16a085; --c5-bg: #e8f8f5; --c5-border: #a2d9ce;
+            --c6: #d35400; --c6-bg: #fef0e7; --c6-border: #f0b27a;
+            --c7: #c0392b; --c7-bg: #fdedec; --c7-border: #f1948a;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); overflow: hidden; height: 100vh; cursor: grab; user-select: none; }
+        body.dragging { cursor: grabbing; }
+
+        .toolbar { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 1000; display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+        .toolbar h1 { font-size: 18px; font-weight: 700; color: var(--text); margin-right: 12px; white-space: nowrap; }
+        .toolbar-sep { width: 1px; height: 24px; background: var(--border); }
+        .toolbar input { border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; font-family: 'Inter', sans-serif; width: 200px; background: var(--canvas-bg); color: var(--text); transition: border-color 0.2s; }
+        .toolbar input:focus { outline: none; border-color: #2980b9; box-shadow: 0 0 0 3px rgba(41,128,185,0.15); }
+        .toolbar input::placeholder { color: var(--text-muted); }
+        .tb-btn { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg); cursor: pointer; font-size: 16px; transition: all 0.15s; color: var(--text-muted); }
+        .tb-btn:hover { background: var(--canvas-bg); color: var(--text); border-color: #aaa; }
+        .zoom-label { font-size: 12px; color: var(--text-muted); min-width: 42px; text-align: center; font-variant-numeric: tabular-nums; }
+        .zoom-hint { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+
+        .progress-bar { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 1000; display: flex; align-items: center; gap: 12px; padding: 10px 20px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); font-size: 13px; }
+        .progress-track { width: 200px; height: 6px; background: var(--canvas-bg); border-radius: 3px; overflow: hidden; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #27ae60, #2ecc71); border-radius: 3px; transition: width 0.5s ease; }
+        .progress-text { color: var(--text-muted); font-size: 12px; font-weight: 500; }
+        .kbd { display: inline-block; padding: 2px 6px; font-size: 11px; font-family: 'JetBrains Mono', monospace; background: var(--canvas-bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); }
+
+        #canvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; will-change: transform; background-image: radial-gradient(circle, #d5d0c8 1px, transparent 1px); background-size: 30px 30px; }
+        #connections { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
+        .conn-line { fill: none; stroke-width: 2; stroke-linecap: round; opacity: 0.4; }
+        .conn-line.active { opacity: 0.7; stroke-width: 2.5; }
+
+        .center-hub { position: absolute; width: 160px; height: 160px; border-radius: 50%; background: white; border: 3px solid var(--text); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(0,0,0,0.1); transition: transform 0.3s, box-shadow 0.3s; z-index: 10; }
+        .center-hub:hover { transform: translate(-50%, -50%) scale(1.05) !important; box-shadow: 0 8px 35px rgba(0,0,0,0.15); }
+        .center-hub-title { font-size: 18px; font-weight: 700; text-align: center; line-height: 1.2; }
+        .center-hub-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+        .branch-node { position: absolute; padding: 14px 20px; border-radius: 14px; background: var(--card-bg); border: 2.5px solid var(--border); cursor: pointer; transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); z-index: 5; min-width: 160px; text-align: center; box-shadow: var(--shadow); }
+        .branch-node:hover { transform: translate(-50%, -50%) scale(1.06); box-shadow: var(--shadow-hover); }
+        .branch-node.expanded { transform: translate(-50%, -50%) scale(1.1); z-index: 20; }
+        .branch-icon { font-size: 24px; margin-bottom: 4px; }
+        .branch-title { font-size: 15px; font-weight: 700; line-height: 1.2; }
+        .branch-count { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .branch-check { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border); background: white; display: flex; align-items: center; justify-content: center; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+        .branch-check.done { background: #27ae60; border-color: #27ae60; color: white; }
+        /* Info icon on branch for detail */
+        .branch-info { position: absolute; bottom: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border); background: white; display: flex; align-items: center; justify-content: center; font-size: 11px; cursor: pointer; transition: all 0.2s; color: var(--text-muted); }
+        .branch-info:hover { background: #ebf5fb; border-color: #2980b9; color: #2980b9; }
+        @keyframes popIn { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); } 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+        .branch-node { animation: popIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) backwards; }
+
+        .sub-nodes-container { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 15; }
+        .sub-node { position: absolute; padding: 10px 14px; border-radius: 10px; background: var(--card-bg); border: 2px solid var(--border); cursor: pointer; pointer-events: auto; opacity: 0; transform: translate(-50%, -50%) scale(0.5); transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); max-width: 200px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); z-index: 16; }
+        .sub-node.visible { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        .sub-node:hover { transform: translate(-50%, -50%) scale(1.08); box-shadow: var(--shadow-hover); z-index: 30; }
+        .sub-node-keyword { font-size: 13px; font-weight: 700; line-height: 1.2; }
+        .sub-node-one { font-size: 11px; color: var(--text-muted); margin-top: 3px; line-height: 1.3; }
+
+        /* ===== DETAIL PANEL ===== */
+        .detail-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+        .detail-overlay.open { opacity: 1; pointer-events: auto; }
+        .detail-panel { position: fixed; top: 0; right: -560px; width: 540px; height: 100vh; background: var(--card-bg); border-left: 1px solid var(--border); z-index: 2001; overflow-y: auto; transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: -8px 0 30px rgba(0,0,0,0.1); }
+        .detail-panel.open { right: 0; }
+        .detail-header { padding: 24px 28px 16px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--card-bg); z-index: 1; }
+        .detail-close { position: absolute; top: 16px; right: 20px; width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: white; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; transition: all 0.15s; }
+        .detail-close:hover { background: #fdf2f2; border-color: #e74c3c; color: #e74c3c; }
+        .detail-keyword { font-size: 24px; font-weight: 700; padding-right: 40px; }
+        .detail-oneliner { font-size: 14px; color: var(--text-muted); margin-top: 4px; font-style: italic; }
+        .detail-body { padding: 24px 28px 80px; }
+
+        .detail-section { margin-bottom: 16px; }
+        .detail-toggle { display: flex; align-items: center; gap: 8px; padding: 10px 0; cursor: pointer; font-weight: 600; font-size: 14px; color: var(--text); border-bottom: 1px solid var(--border); transition: color 0.2s; }
+        .detail-toggle:hover { color: #2980b9; }
+        .toggle-arrow { display: inline-block; transition: transform 0.2s; font-size: 12px; color: var(--text-muted); }
+        .detail-toggle.open .toggle-arrow { transform: rotate(90deg); }
+        .toggle-content { max-height: 0; overflow: hidden; transition: max-height 0.4s ease; }
+        .toggle-content.open { max-height: 8000px; }
+        .toggle-inner { padding: 12px 0 4px 20px; font-size: 14px; line-height: 1.7; color: #374151; }
+
+        /* Code blocks — multiline */
+        .code-block { background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 14px 16px; margin: 10px 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; overflow-x: auto; white-space: pre; border: 1px solid #313244; }
+        .code-block .kw { color: #cba6f7; } .code-block .str { color: #a6e3a1; }
+        .code-block .cmt { color: #6c7086; font-style: italic; } .code-block .ann { color: #f9e2af; }
+        .code-block .num { color: #fab387; } .code-block .type { color: #89b4fa; }
+        .code-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 12px; margin-bottom: 4px; }
+
+        /* Inline code — SAME dark style as code blocks */
+        .toggle-inner code, .detail-body code, .md-content code {
+            background: #1e1e2e; color: #cdd6f4; padding: 2px 7px; border-radius: 5px;
+            font-family: 'JetBrains Mono', monospace; font-size: 12px; border: 1px solid #313244;
+            white-space: nowrap;
+        }
+        /* But don't double-style code inside code-blocks */
+        .code-block code { background: none; color: inherit; padding: 0; border: none; border-radius: 0; }
+
+        /* Rendered markdown content */
+        .md-content { font-size: 14px; line-height: 1.8; color: #374151; }
+        .md-content h1, .md-content h2, .md-content h3 { color: var(--text); margin-top: 20px; margin-bottom: 8px; }
+        .md-content h1 { font-size: 20px; } .md-content h2 { font-size: 17px; border-bottom: 1px solid var(--border); padding-bottom: 6px; } .md-content h3 { font-size: 15px; }
+        .md-content p { margin-bottom: 10px; }
+        .md-content ul, .md-content ol { margin-left: 20px; margin-bottom: 10px; }
+        .md-content li { margin-bottom: 4px; }
+        .md-content blockquote { border-left: 3px solid var(--border); padding-left: 14px; color: var(--text-muted); margin: 10px 0; font-style: italic; }
+        .md-content pre { background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 14px 16px; margin: 10px 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; overflow-x: auto; border: 1px solid #313244; }
+        .md-content pre code { background: none; color: inherit; padding: 0; border: none; border-radius: 0; white-space: pre; }
+        .md-content table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+        .md-content th, .md-content td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; }
+        .md-content th { background: var(--canvas-bg); font-weight: 600; }
+        .md-content hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+        .md-content img { max-width: 100%; border-radius: 8px; }
+        .md-loading { padding: 20px; text-align: center; color: var(--text-muted); font-style: italic; }
+        .md-error { padding: 12px; background: #fef5e7; border: 1px solid #fad7a0; border-radius: 8px; color: #856404; font-size: 13px; }
+
+        /* Interview trigger callout */
+        .trigger-callout { margin-top: 12px; padding: 14px 16px; border-radius: 10px; border-left: 4px solid #8e44ad; font-size: 14px; line-height: 1.6; color: #5b21b6; }
+
+        /* Use case cards */
+        .usecase-card { background: var(--canvas-bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin: 8px 0; }
+        .usecase-title { font-weight: 600; font-size: 13px; color: var(--text); margin-bottom: 4px; }
+        .usecase-company { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; font-style: italic; }
+        .usecase-desc { font-size: 13px; line-height: 1.6; color: #374151; }
+
+        /* Full article link */
+        .full-article-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 16px; padding: 10px 16px; border-radius: 8px; background: var(--canvas-bg); border: 1px solid var(--border); color: #2980b9; font-size: 13px; font-weight: 600; text-decoration: none; transition: all 0.2s; cursor: pointer; }
+        .full-article-link:hover { background: #ebf5fb; border-color: #aed6f1; }
+
+        /* Confidence */
+        .confidence { display: flex; align-items: center; gap: 4px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+        .confidence-label { font-size: 12px; color: var(--text-muted); margin-right: 8px; }
+        .star { font-size: 20px; cursor: pointer; transition: transform 0.2s; color: #ddd; }
+        .star:hover { transform: scale(1.3); }
+        .star.filled { color: #f59e0b; }
+
+        .minimap { position: fixed; bottom: 60px; right: 16px; width: 180px; height: 120px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); z-index: 999; overflow: hidden; }
+        .minimap canvas { width: 100%; height: 100%; }
+        .minimap-viewport { position: absolute; border: 2px solid #2980b9; border-radius: 2px; background: rgba(41,128,185,0.1); pointer-events: none; }
+
+        .branch-node.search-match { box-shadow: 0 0 0 3px #f59e0b, var(--shadow); }
+        .sub-node.search-match { box-shadow: 0 0 0 3px #f59e0b, var(--shadow); }
+        .branch-node.search-dim { opacity: 0.3; }
+        .sub-node.search-dim { opacity: 0.3; }
+    </style>
+</head>
+<body>
+    <div class="toolbar" id="toolbar">
+        <h1>Event-Driven Design</h1>
+        <div class="toolbar-sep"></div>
+        <input id="searchInput" type="text" placeholder="Search topics... ( / )" />
+        <div class="toolbar-sep"></div>
+        <div class="tb-btn" onclick="zoomIn()" title="Zoom in">+</div>
+        <span class="zoom-label" id="zoomLabel">100%</span>
+        <div class="tb-btn" onclick="zoomOut()" title="Zoom out">&minus;</div>
+        <div class="tb-btn" onclick="fitToScreen()" title="Fit to screen">&#8865;</div>
+        <div class="toolbar-sep"></div>
+        <div class="tb-btn" onclick="collapseAll()" title="Collapse all">&#9671;</div>
+        <div class="tb-btn" onclick="resetProgress()" title="Reset progress">&#8634;</div>
+        <span class="zoom-hint">&nbsp;Ctrl+scroll to zoom</span>
+    </div>
+
+    <div id="canvas">
+        <svg id="connections" width="6000" height="4000"></svg>
+        <div id="centerHub" class="center-hub"></div>
+        <div id="branchLayer"></div>
+        <div id="subNodeLayer" class="sub-nodes-container"></div>
+    </div>
+
+    <div class="detail-overlay" id="detailOverlay" onclick="closeDetail()"></div>
+    <div class="detail-panel" id="detailPanel">
+        <div class="detail-header">
+            <div class="detail-close" onclick="closeDetail()">&#10005;</div>
+            <div class="detail-keyword" id="detailKeyword"></div>
+            <div class="detail-oneliner" id="detailOneliner"></div>
+        </div>
+        <div class="detail-body" id="detailBody"></div>
+    </div>
+
+    <div class="progress-bar" id="progressBar">
+        <span class="progress-text" id="progressText">0 / 8 reviewed</span>
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        <span style="font-size:11px;color:var(--text-muted)">
+            <span class="kbd">1</span>&ndash;<span class="kbd">8</span> branches
+            <span class="kbd">/</span> search
+            <span class="kbd">Esc</span> close
+        </span>
+    </div>
+
+    <div class="minimap" id="minimap">
+        <canvas id="minimapCanvas" width="360" height="240"></canvas>
+        <div class="minimap-viewport" id="minimapViewport"></div>
+    </div>
+
+<script>
+// ===========================
+// DATA
+// ===========================
+const mindmapData = {
+    branches: [
+        {
+            id: 'core-principles', title: 'Core Principles', icon: '\u26A1', file: '01-principles.md',
+            overview: 'The 10 foundational principles of event-driven architecture — the bedrock every architect-level interview tests on. These principles govern how services communicate, handle data, maintain consistency, and evolve over time.',
+            usecases: [
+                { title: 'Netflix: Microservice Communication', company: 'Netflix', desc: 'Netflix migrated from monolithic REST calls to event-driven communication across 700+ microservices. Each service emits domain events, enabling independent deployment cycles and fault isolation. When the recommendation engine updates, it doesn\'t need the streaming service to be available.' },
+                { title: 'Uber: Surge Pricing', company: 'Uber', desc: 'Uber uses event streams to asynchronously propagate real-time supply/demand signals. Driver location events, ride request events, and pricing events flow through Kafka, enabling the surge pricing engine to react in under 1 second without synchronous API calls.' },
+                { title: 'LinkedIn: Activity Feed', company: 'LinkedIn', desc: 'LinkedIn\'s activity feed is built on event-driven principles — every user action (post, like, comment, share) is an immutable event. Downstream services (notifications, analytics, search indexing) consume these events independently.' }
+            ],
+            subnodes: [
+                { keyword: 'Async Communication', oneliner: 'Fire event, don\'t wait. Email vs phone call.',
+                  explanation: '<p>Asynchronous communication means producers emit events and continue without waiting for consumers to process them. This decouples timeline dependencies and enables independent scaling.</p><p>Think of it like email vs phone call. With synchronous (REST), you dial and wait. With async (events), you send the message and move on. The consumer processes it when ready.</p><p><strong>Key design implication:</strong> You cannot rely on an immediate response. Design your UI and services for eventual feedback — use status polling, webhooks, or SSE to communicate results back.</p>',
+                  trigger: '"In event-driven systems, producers are fire-and-forget. They emit the event and move on, exactly like sending an email vs a phone call where you wait for a response."',
+                  usecases: [
+                    { title: 'Order Confirmation Emails', company: 'E-commerce', desc: 'When a user places an order, the Order Service emits <code>OrderPlaced</code> and returns immediately. The Email Service, Inventory Service, and Analytics Service all consume this event independently — the user doesn\'t wait for all 3 to finish.' }
+                  ] },
+                { keyword: 'Loose Coupling', oneliner: 'Schema is the only contract. Producers \u2260 consumers.',
+                  explanation: '<p>Services are decoupled via shared schema only. Producer doesn\'t know or care about consumers. This allows independent deployment and failure isolation.</p><p><strong>The contract is the event schema.</strong> As long as both sides agree on the shape of the event (fields, types, versioning strategy), they can evolve independently. No shared libraries, no direct API calls.</p><p><strong>Anti-pattern:</strong> "Fat events" that expose internal DB structure. Keep events representing business facts, not database rows.</p>',
+                  trigger: '"We achieve loose coupling through contract: the event schema. Producer and consumer negotiate only this, nothing else."' },
+                { keyword: 'Event Immutability', oneliner: 'Append-only facts. Never mutate, only amend.',
+                  explanation: '<p>Events are immutable facts about what happened. Once emitted, they\'re permanent. To correct, emit a new compensating or amended event. This preserves audit trail and enables replay semantics.</p><p><strong>Why this matters:</strong> If events are mutable, you can\'t replay them safely, you can\'t audit, and you can\'t build event sourcing. Immutability is the foundation of the entire pattern.</p><p><strong>Example:</strong> <code>OrderPlaced</code> happened. If the customer cancels, you don\'t delete the event — you emit <code>OrderCancelled</code>. Both facts exist in the log.</p>',
+                  trigger: '"Events are facts that already happened. Once emitted, they\'re immutable. We never mutate\u2014we only amend by emitting new events."' },
+                { keyword: 'Single Responsibility', oneliner: 'One event = one business fact.',
+                  explanation: '<p>Each event type represents one discrete business fact. Avoid kitchen-sink events with 15 fields. Granular events compose better and are more reusable across consumers.</p><p><strong>Anti-pattern:</strong> <code>OrderUpdated</code> with a "changes" map containing every possible field. Instead: <code>OrderShipped</code>, <code>OrderAddressChanged</code>, <code>OrderItemAdded</code> — each is a specific fact.</p>',
+                  trigger: '"We design events such that one event = one business fact. This makes them reusable and composable."' },
+                { keyword: 'Eventual Consistency', oneliner: 'Not immediate, but bounded and predictable.',
+                  explanation: '<p>Systems reach <strong>bounded eventual consistency</strong>: within a defined time window, all services converge to the same view. Predictability is key.</p><p><strong>Key insight:</strong> "Eventual" doesn\'t mean "maybe never." It means predictable convergence within your SLA window. If your SLA is 5 seconds, your consumers must process within 5 seconds under normal load.</p>',
+                  trigger: '"Eventual consistency isn\'t about \'maybe never\'\u2014it\'s about predictable convergence within our SLA window."' },
+                { keyword: 'Event Ordering', oneliner: 'Per-partition guarantee, NOT global.',
+                  explanation: '<p>Events within a single Kafka partition are strictly ordered. Global ordering across partitions is <strong>not</strong> guaranteed.</p><p><strong>Design rule:</strong> If you need strict order between events (e.g., <code>OrderCreated</code> before <code>OrderShipped</code>), ensure they hash to the same partition using the same key (e.g., <code>order_id</code>).</p><p><strong>Gotcha:</strong> Changing partition count after topic creation re-hashes keys, breaking ordering guarantees for existing data.</p>',
+                  trigger: '"Ordering is per-partition. If you need strict sequence, all related events must hash to the same partition."' },
+                { keyword: 'Idempotent Processing', oneliner: 'Same message twice \u2192 same result.',
+                  explanation: '<p>Consumers must handle duplicate delivery idempotently: <code>f(f(x)) = f(x)</code>. Apply deduplication logic so processing the same message twice yields identical results.</p><p><strong>Implementation:</strong> Store <code>message_id</code> in a dedup table with a unique constraint. Before processing, check if already processed.</p>',
+                  trigger: '"Idempotent processing means f(f(x)) = f(x). Apply once or apply twice\u2014same outcome."' },
+                { keyword: 'Observability', oneliner: 'Correlation ID on every event.',
+                  explanation: '<p>Trace events across services using correlation IDs. Every event should carry trace context so you can follow the business transaction end-to-end.</p><p><strong>Minimum event envelope:</strong></p><div class="code-block"><span class="cmt">// Every event should carry this metadata</span>\n{\n  <span class="str">"event_id"</span>: <span class="str">"uuid-v4"</span>,\n  <span class="str">"correlation_id"</span>: <span class="str">"original-request-id"</span>,\n  <span class="str">"causation_id"</span>: <span class="str">"parent-event-id"</span>,\n  <span class="str">"timestamp"</span>: <span class="str">"ISO-8601"</span>,\n  <span class="str">"source"</span>: <span class="str">"order-service"</span>,\n  <span class="str">"type"</span>: <span class="str">"OrderCreated"</span>,\n  <span class="str">"data"</span>: { ... }\n}</div>',
+                  trigger: '"Every event carries a correlation ID. You must trace the business transaction end-to-end."' },
+                { keyword: 'Backpressure', oneliner: 'Don\'t drop under load; queue, slow, or shed.',
+                  explanation: '<p>Three strategies when overwhelmed:</p><p><strong>1. Queue deeper:</strong> Let Kafka buffer. Increase retention.</p><p><strong>2. Slow down:</strong> Reduce <code>max.poll.records</code>.</p><p><strong>3. Shed non-critical work:</strong> Route low-priority events to a separate topic.</p><p><strong>Never silently drop messages in production.</strong></p>',
+                  trigger: '"Under load, we apply backpressure: queue deeper, slow down, or shed non-critical work\u2014never drop silently."' },
+                { keyword: 'Schema Versioning', oneliner: 'Evolve without breaking consumers.',
+                  explanation: '<p>Use schema evolution: add optional fields, deprecate old fields gracefully.</p><p><strong>Rules:</strong></p><p>\u2022 Adding a new optional field = safe<br>\u2022 Removing a required field = breaking<br>\u2022 Changing a field type = breaking<br>\u2022 Renaming a field = breaking</p><p><strong>Use Schema Registry</strong> (Confluent or Apicurio) to enforce compatibility checks at CI time.</p>',
+                  trigger: '"Schema evolution must be backward compatible. Add optionally, deprecate gracefully."' }
+            ]
+        },
+        {
+            id: 'messaging-options', title: 'Messaging Options', icon: '\uD83D\uDCEC', file: '02-messaging-options.md',
+            overview: 'A comparative guide to the 5 major messaging systems: Kafka, RabbitMQ, Redis Pub/Sub, AWS SNS/SQS, and Google Pub/Sub. The architect\'s job is matching the right tool to the constraint — throughput, durability, ops budget.',
+            usecases: [
+                { title: 'Spotify: Kafka for Event Sourcing', company: 'Spotify', desc: 'Spotify uses Kafka to stream billions of play events per day. They chose Kafka specifically for its replay capability — when they add a new recommendation model, they replay 30 days of events to train it.' },
+                { title: 'Shopify: RabbitMQ for Order Routing', company: 'Shopify', desc: 'Shopify uses RabbitMQ for routing orders to different fulfillment centers using topic exchanges. The flexible routing topology lets them add new fulfillment rules without changing the producer.' }
+            ],
+            subnodes: [
+                { keyword: 'Kafka', oneliner: '1M+ msgs/sec, replay, event sourcing.',
+                  explanation: '<p>Distributed event streaming platform optimized for <strong>throughput, durability, and replay</strong>.</p><p><strong>When to choose:</strong> Replay semantics, event sourcing, 1M+ msg/sec, strong ordering per partition, long retention.</p><p><strong>When NOT:</strong> Simple request-reply, low volume (&lt;1K/sec), small team with no Kafka expertise.</p>',
+                  trigger: '"Kafka is our choice when we need replay semantics, event sourcing, and 1M+ msg/sec throughput."' },
+                { keyword: 'RabbitMQ', oneliner: 'Complex routing, exchange types.',
+                  explanation: '<p>Excels in <strong>flexible routing</strong> with exchanges (direct, topic, fanout, headers). Good for request-reply, complex topologies, priority queues, dead-letter exchanges.</p><p><strong>Throughput:</strong> ~50K msg/sec (vs Kafka 1M+). Good enough for most microservice architectures.</p>',
+                  trigger: '"RabbitMQ shines when you need sophisticated routing: topic exchanges, fanout, dead-letter queues."' },
+                { keyword: 'Redis Pub/Sub', oneliner: 'Fire-and-forget, in-memory speed.',
+                  explanation: '<p>Fastest option but <strong>no persistence</strong>. Messages only in memory, delivered to currently connected subscribers.</p><p><strong>Redis Streams</strong> (not Pub/Sub) adds persistence and consumer groups — a middle ground.</p>',
+                  trigger: '"Redis Pub/Sub is our pick for ephemeral events where latency < 10ms matters more than durability."' },
+                { keyword: 'AWS SNS/SQS', oneliner: 'Managed, serverless fan-out + queue.',
+                  explanation: '<p><strong>SNS</strong> for pub/sub fanout, <strong>SQS</strong> for queuing. Common pattern: SNS fans out to multiple SQS queues.</p><p><strong>Advantage:</strong> Zero ops overhead. Pay per message. Perfect for serverless (Lambda) architectures.</p>',
+                  trigger: '"SNS/SQS combo handles fanout and queueing in a fully managed, serverless way."' },
+                { keyword: 'Google Pub/Sub', oneliner: 'Global scale, 7-day replay.',
+                  explanation: '<p>Managed messaging with <strong>global scale</strong> and <strong>7-day message retention</strong> with replay. Best for GCP-native workloads.</p>',
+                  trigger: '"Google Pub/Sub gives us managed global scale with 7-day replay on GCP."' },
+                { keyword: 'Decision Framework', oneliner: 'Throughput \u2192 durability \u2192 ops budget.',
+                  explanation: '<p>Three questions in order:</p><p><strong>1. Throughput:</strong> &gt;100K/sec? \u2192 Kafka.</p><p><strong>2. Durability:</strong> Need replay? \u2192 Kafka or Google Pub/Sub. Fire-and-forget OK? \u2192 Redis.</p><p><strong>3. Ops budget:</strong> Small team? \u2192 SNS/SQS. DevOps-heavy? \u2192 Self-hosted Kafka.</p>',
+                  trigger: '"We choose messaging by asking: throughput needs first, then durability SLA, then ops budget."' }
+            ]
+        },
+        {
+            id: 'kafka-internals', title: 'Kafka Internals', icon: '\uD83D\uDD27', file: '03-kafka-internals.md',
+            overview: 'How Kafka works under the hood — topics, partitions, offsets, brokers, ISR, and the ZooKeeper-to-KRaft migration. This is where interviewers test whether you truly understand the machinery or just know the API.',
+            usecases: [
+                { title: 'LinkedIn: Origin of Kafka', company: 'LinkedIn', desc: 'Kafka was born at LinkedIn to handle their activity stream pipeline. They needed a system that could handle 1 trillion messages/day with sub-second latency while allowing replay for new consumers. The partition-based design was key to achieving horizontal scalability.' },
+                { title: 'Confluent: KRaft Migration', company: 'Confluent', desc: 'Confluent led the KRaft migration, replacing ZooKeeper with internal Raft consensus. This eliminated an external dependency, reduced metadata propagation from seconds to sub-100ms, and enabled support for millions of partitions per cluster.' }
+            ],
+            subnodes: [
+                { keyword: 'Topics & Partitions', oneliner: 'Partition = unit of parallelism + ordering.',
+                  explanation: '<p>Topics are logical streams; partitions are physical units — <strong>ordered, immutable append-only logs</strong> on brokers.</p><p>\u2022 One consumer per partition per group (max parallelism = partition count)<br>\u2022 Ordering guaranteed only within a partition<br>\u2022 More partitions = more parallelism + more overhead</p>',
+                  trigger: '"Partitions are the unit of parallelism. More partitions = more consumers can scale in parallel."' },
+                { keyword: 'Offsets', oneliner: 'Position-based tracking. Enables replay.',
+                  explanation: '<p>Offset is a monotonically increasing integer per partition. Consumer groups track offsets to resume. <strong>Replay:</strong> Rewind offset and reprocess all events.</p><p>Stored in <code>__consumer_offsets</code> internal topic.</p>',
+                  trigger: '"Offset is position-based. We can replay by rewinding offset."' },
+                { keyword: 'Brokers & Controller', oneliner: '3-broker min. Controller manages metadata.',
+                  explanation: '<p>Brokers store partition replicas. Controller is elected broker managing metadata: leader elections, partition assignments, ISR changes.</p><p><strong>Minimum 3 brokers</strong> for production HA. No single broker should store &gt;4000 partition replicas.</p>',
+                  trigger: '"3 brokers minimum for HA. One is controller, managing metadata and leader election."' },
+                { keyword: 'ISR (In-Sync Replicas)', oneliner: 'Safety net. min.insync = your floor.',
+                  explanation: '<p>ISR = set of replicas caught up with the leader.</p><div class="code-block"><span class="cmt">// The safety equation</span>\nreplication.factor = <span class="num">3</span>    <span class="cmt">// 3 copies</span>\nmin.insync.replicas = <span class="num">2</span>  <span class="cmt">// at least 2 must ack</span>\nacks = all                 <span class="cmt">// wait for min.insync</span>\n\n<span class="cmt">// Lose 1 broker: ISR=2, writes continue</span>\n<span class="cmt">// Lose 2 brokers: ISR=1 &lt; min.insync, writes BLOCK</span></div>',
+                  trigger: '"ISR is our safety gauge. If ISR shrinks below min.insync.replicas, acks=all will block."' },
+                { keyword: 'ZooKeeper vs KRaft', oneliner: 'KRaft = no external dep, sub-100ms metadata.',
+                  explanation: '<p><strong>KRaft</strong> replaces ZooKeeper with internal Raft consensus.</p><p>\u2022 No external dependency<br>\u2022 Sub-100ms metadata propagation (ZK was seconds)<br>\u2022 Millions of partitions supported<br>\u2022 Production-ready since Kafka 3.5</p>',
+                  trigger: '"KRaft is the future: self-hosted consensus, no ZooKeeper, lower metadata latency."' },
+                { keyword: 'Partition Assignment', oneliner: 'hash(key) % partitions. Sticky strategy.',
+                  explanation: '<p><strong>Producer:</strong> <code>hash(key) % num_partitions</code>. Null key = round-robin.</p><p><strong>Consumer strategies:</strong> RoundRobin, Range, Sticky, CooperativeSticky. <strong>Always use CooperativeSticky</strong> — eliminates "stop-the-world" rebalance pause.</p>',
+                  trigger: '"Producer: hash(key) % partitions. Consumer: CooperativeSticky is modern best practice."' }
+            ]
+        },
+        {
+            id: 'kafka-configs', title: 'Kafka Configs', icon: '\u2699\uFE0F', file: '04-kafka-configs.md',
+            overview: 'The field guide to Kafka configuration — durability trinity, producer tuning, consumer offsets, session timeouts, and Spring Kafka integration. This is where interviewers separate "used Kafka" from "tuned Kafka in production."',
+            usecases: [
+                { title: 'Payment System: Zero Data Loss', company: 'Fintech', desc: 'A payment processing system configured with the durability trinity (<code>replication.factor=3</code>, <code>min.insync.replicas=2</code>, <code>unclean.leader.election=false</code>) plus <code>acks=all</code> and idempotent producer. Result: zero message loss across 500M daily transactions over 2 years.' },
+                { title: 'Real-time Analytics Pipeline', company: 'AdTech', desc: 'An ad-tech company configured producers with <code>batch.size=64KB</code>, <code>linger.ms=50</code>, <code>compression=lz4</code> for their clickstream pipeline. Throughput went from 200K to 1.2M events/sec with the same hardware.' }
+            ],
+            subnodes: [
+                { keyword: 'Durability Trinity', oneliner: 'replication=3, min.insync=2, no unclean election.',
+                  explanation: '<p>Three non-negotiable configs for production:</p><div class="code-block">replication.factor = <span class="num">3</span>\nmin.insync.replicas = <span class="num">2</span>\nunclean.leader.election.enable = <span class="kw">false</span></div><p>Without all three, you risk data loss during broker failures.</p>',
+                  trigger: '"Durability trinity: replication.factor=3, min.insync.replicas=2, unclean.leader.election=false."' },
+                { keyword: 'Producer: acks', oneliner: 'acks=all for safety, acks=1 for speed.',
+                  explanation: '<p><code>acks=0</code>: fire-forget. <code>acks=1</code>: leader only. <code>acks=all</code>: all in-sync replicas.</p><div class="code-block"><span class="cmt"># Financial/payment systems</span>\nacks = all\nenable.idempotence = <span class="kw">true</span>\nmax.in.flight.requests.per.connection = <span class="num">1</span>\n\n<span class="cmt"># Metrics/analytics</span>\nacks = <span class="num">1</span>\nbatch.size = <span class="num">65536</span>\nlinger.ms = <span class="num">50</span></div>',
+                  trigger: '"acks=all for money. acks=1 for metrics. acks=0 only in lab."' },
+                { keyword: 'Producer: Batching', oneliner: 'batch.size + linger.ms + compression.',
+                  explanation: '<p>Batching is your <strong>throughput multiplier</strong> (3-10x):</p><div class="code-block"><span class="cmt"># Balanced baseline</span>\nbatch.size = <span class="num">32768</span>       <span class="cmt"># 32KB</span>\nlinger.ms = <span class="num">10</span>           <span class="cmt"># wait 10ms</span>\ncompression.type = snappy <span class="cmt"># 3-4x reduction</span>\n\n<span class="cmt"># High-throughput (analytics)</span>\nbatch.size = <span class="num">65536</span>       <span class="cmt"># 64KB</span>\nlinger.ms = <span class="num">50</span>\ncompression.type = lz4\n\n<span class="cmt"># Low-latency (real-time)</span>\nbatch.size = <span class="num">16384</span>\nlinger.ms = <span class="num">0</span>            <span class="cmt"># send immediately</span></div>',
+                  trigger: '"Batching is your throughput multiplier: batch.size=32KB, linger.ms=10, compression=snappy."' },
+                { keyword: 'Producer: Idempotence', oneliner: 'enable.idempotence=true. Requires acks=all.',
+                  explanation: '<p>Ensures <strong>no duplicate messages</strong> from producer retries via sequence numbers.</p><div class="code-block">enable.idempotence = <span class="kw">true</span>\nacks = all  <span class="cmt"># required</span>\nmax.in.flight.requests.per.connection = <span class="num">5</span>  <span class="cmt"># max</span>\nretries = Integer.MAX_VALUE</div><p><strong>Note:</strong> Producer-side dedup only. Consumer-side dedup still needed.</p>',
+                  trigger: '"enable.idempotence=true eliminates producer duplicates via sequence numbers."' },
+                { keyword: 'Consumer: Offsets', oneliner: 'auto.commit=false. Manual commit always.',
+                  explanation: '<p><strong>auto.commit is a trap.</strong> Offset committed on timer regardless of processing success.</p><div class="code-block"><span class="cmt"># Always disable auto-commit</span>\nenable.auto.commit = <span class="kw">false</span>\n\n<span class="cmt"># Spring Kafka</span>\nspring.kafka.consumer.enable-auto-commit = <span class="kw">false</span>\nspring.kafka.listener.ack-mode = MANUAL</div><p><strong>Golden Rule:</strong> Consume \u2192 Process \u2192 Commit. Never commit first.</p>',
+                  trigger: '"Always manual commit: process first, commit after. Auto-commit is a trap."' },
+                { keyword: 'Consumer: Session', oneliner: 'session.timeout + heartbeat + max.poll.',
+                  explanation: '<p>The <strong>timeout trinity</strong>:</p><div class="code-block">session.timeout.ms = <span class="num">10000</span>      <span class="cmt"># 10s dead threshold</span>\nheartbeat.interval.ms = <span class="num">3000</span>  <span class="cmt"># 3s heartbeat</span>\nmax.poll.interval.ms = <span class="num">300000</span> <span class="cmt"># 5min max between polls</span>\n\n<span class="cmt"># Rule: heartbeat = session.timeout / 3</span>\n<span class="cmt"># Processing > max.poll.interval = rebalance!</span></div>',
+                  trigger: '"Session timeout trinity: heartbeat = session.timeout / 3."' },
+                { keyword: 'Spring Kafka', oneliner: 'ack-mode=MANUAL, concurrency \u2264 partitions.',
+                  explanation: '<div class="code-block"><span class="ann">@KafkaListener</span>(topics = <span class="str">"orders"</span>, groupId = <span class="str">"order-service"</span>)\n<span class="kw">public void</span> listen(String message, Acknowledgment ack) {\n    <span class="kw">try</span> {\n        processOrder(message);\n        ack.acknowledge(); <span class="cmt">// commit only on success</span>\n    } <span class="kw">catch</span> (Exception e) {\n        <span class="kw">throw</span> e; <span class="cmt">// don\'t ack; will replay</span>\n    }\n}</div><div class="code-block"><span class="cmt"># application.yml</span>\nspring.kafka:\n  listener:\n    ack-mode: MANUAL\n    concurrency: <span class="num">3</span>  <span class="cmt"># must be \u2264 partition count</span>\n  consumer:\n    enable-auto-commit: <span class="kw">false</span>\n    auto-offset-reset: earliest</div><p><strong>Critical:</strong> <code>concurrency</code> must be \u2264 partition count. Extra threads cause rebalancing churn.</p>',
+                  trigger: '"Spring Kafka: concurrency \u2264 partition count, ack-mode=MANUAL."',
+                  usecases: [
+                    { title: 'Order Processing Service', company: 'E-commerce', desc: 'Spring Boot service with 6 partitions and <code>concurrency=6</code>. Each thread processes orders independently. Manual ack ensures no order is lost even if a thread crashes mid-processing.' }
+                  ] }
+            ]
+        },
+        {
+            id: 'delivery-semantics', title: 'Delivery Semantics', icon: '\uD83D\uDCE6', file: '05-delivery-semantics.md',
+            overview: 'The three delivery guarantees (at-most-once, at-least-once, exactly-once) and the idempotent consumer pattern. This is the #1 area interviewers test to distinguish senior from principal engineers.',
+            usecases: [
+                { title: 'Stripe: Idempotent Payment Processing', company: 'Stripe', desc: 'Stripe\'s API uses idempotency keys on every payment request. If a client retries (network timeout), Stripe returns the same result without double-charging. This pattern flows into their event-driven backend: every consumer is idempotent by design.' },
+                { title: 'Wealthfront: Exactly-Once for Trades', company: 'Wealthfront', desc: 'Wealthfront uses exactly-once semantics (transactional producer + consumer) for stock trade execution. The 30% performance overhead is acceptable because duplicate trades would be catastrophic.' }
+            ],
+            subnodes: [
+                { keyword: 'At-Most-Once', oneliner: 'Fire and forget. Never for money.',
+                  explanation: '<p>No acks, messages may be lost. Fast but lossy.</p><div class="code-block"><span class="cmt"># At-most-once config</span>\nacks = <span class="num">0</span>\nretries = <span class="num">0</span></div><p><strong>OK for:</strong> Telemetry, analytics, non-critical logs.</p><p><strong>Never for:</strong> Financial transactions, orders, user data.</p>',
+                  trigger: '"At-most-once: fast but loses data. Good for analytics, bad for financial systems."' },
+                { keyword: 'At-Least-Once', oneliner: 'Retry + idempotent consumer. 90% of systems.',
+                  explanation: '<p>Producer retries on failure. Consumer may see duplicates — handle with idempotency. <strong>The production standard for 90% of systems.</strong></p><div class="code-block"><span class="cmt"># At-least-once config</span>\nacks = all\nretries = Integer.MAX_VALUE\nenable.idempotence = <span class="kw">true</span>\nenable.auto.commit = <span class="kw">false</span></div>',
+                  trigger: '"At-least-once is the production standard: retries ensure delivery, idempotency handles duplicates."' },
+                { keyword: 'Exactly-Once', oneliner: 'Transactions + idempotent producer. 20-50% perf tax.',
+                  explanation: '<p>Idempotent producer + transactional reads/writes. 20-50% latency overhead.</p><div class="code-block">enable.idempotence = <span class="kw">true</span>\ntransactional.id = <span class="str">"payment-producer-1"</span>\nacks = all\nisolation.level = read_committed</div><p><strong>Use only when mandated</strong> (financial settlement, trade execution).</p>',
+                  trigger: '"Exactly-once requires transactional writes and idempotent producer. Do you really need it?"' },
+                { keyword: 'Idempotent Consumer', oneliner: 'DB unique constraint on message ID.',
+                  explanation: '<p>Dual-layer deduplication: <strong>Redis (fast path) + DB (source of truth)</strong>.</p><div class="code-block"><span class="ann">@KafkaListener</span>(topics = <span class="str">"order-events"</span>)\n<span class="ann">@Transactional</span>\n<span class="kw">public void</span> process(ConsumerRecord&lt;String, OrderEvent&gt; record,\n                    Acknowledgment ack) {\n    String msgId = extractMessageId(record);\n\n    <span class="cmt">// Fast path: Redis cache check</span>\n    <span class="kw">if</span> (redisCache.hasKey(<span class="str">"dedup:"</span> + msgId)) {\n        ack.acknowledge(); <span class="kw">return</span>;\n    }\n\n    <span class="cmt">// Slow path: DB check (source of truth)</span>\n    <span class="kw">if</span> (dedupRepo.existsByMessageId(msgId)) {\n        redisCache.set(<span class="str">"dedup:"</span> + msgId, <span class="str">"1"</span>, 7, DAYS);\n        ack.acknowledge(); <span class="kw">return</span>;\n    }\n\n    <span class="cmt">// Process</span>\n    Order order = orderService.createOrder(record.value());\n\n    <span class="cmt">// Record dedup BEFORE ack</span>\n    dedupRepo.save(<span class="kw">new</span> DedupRecord(msgId, Instant.now()));\n    redisCache.set(<span class="str">"dedup:"</span> + msgId, <span class="str">"1"</span>, 7, DAYS);\n    ack.acknowledge();\n}</div><div class="code-label">DEDUP TABLE DDL</div><div class="code-block"><span class="kw">CREATE TABLE</span> message_dedup (\n    message_id <span class="type">VARCHAR</span>(<span class="num">255</span>),\n    consumer_group <span class="type">VARCHAR</span>(<span class="num">100</span>),\n    processed_at <span class="type">TIMESTAMP</span>,\n    <span class="kw">PRIMARY KEY</span> (message_id, consumer_group)\n);</div>',
+                  trigger: '"Idempotent consumer: INSERT OR IGNORE on message_id."',
+                  usecases: [
+                    { title: 'Order Fulfillment Dedup', company: 'E-commerce', desc: 'Redis cache catches 99.5% of duplicate deliveries in &lt;1ms. The remaining 0.5% (cache miss after Redis eviction) hit the database unique constraint — guaranteed dedup at the cost of a DB query.' }
+                  ] },
+                { keyword: 'The Golden Rule', oneliner: 'Consume \u2192 Process \u2192 Commit. Never reverse.',
+                  explanation: '<p><strong>Consume \u2192 Process \u2192 Commit.</strong> Never reverse.</p><p>If you commit first then processing fails: message lost. If you process first then commit fails: message redelivered — your idempotent consumer handles it.</p>',
+                  trigger: '"Golden rule: Consume \u2192 Process \u2192 Commit. Never, ever commit first."' }
+            ]
+        },
+        {
+            id: 'kafka-performance', title: 'Kafka Performance', icon: '\uD83D\uDE80', file: '06-kafka-performance.md',
+            overview: 'Tuning Kafka for throughput vs latency — producer/consumer tuning, partition math, consumer lag monitoring, and the incident response playbook. This section proves you\'ve operated Kafka at scale, not just deployed it.',
+            usecases: [
+                { title: 'Twitter: Real-time Timeline', company: 'Twitter', desc: 'Twitter\'s timeline service processes 500K+ events/sec. They tune producers with <code>linger.ms=5</code> (low latency for real-time timeline) and consumers with <code>max.poll.records=100</code> (small batches for consistent p99 latency).' },
+                { title: 'Datadog: Metrics Pipeline', company: 'Datadog', desc: 'Datadog ingests trillions of metrics points via Kafka. They use high <code>batch.size</code>, <code>lz4</code> compression, and 200+ partitions per topic. Consumer lag in seconds is their primary SLI — growing lag triggers automatic consumer scaling.' }
+            ],
+            subnodes: [
+                { keyword: 'Throughput vs Latency', oneliner: 'batch.size\u2191 = throughput\u2191, latency\u2191.',
+                  explanation: '<p>The fundamental tradeoff. <strong>Bigger batches = higher throughput but higher latency.</strong></p><p>Real-time services: small batches, low <code>linger.ms</code>. Batch jobs: large batches, high <code>linger.ms</code>.</p>',
+                  trigger: '"Throughput and latency trade off. Big batches are efficient; small batches are responsive."' },
+                { keyword: 'Producer Tuning', oneliner: 'batch=32KB, linger=10ms, snappy.',
+                  explanation: '<div class="code-block">batch.size = <span class="num">32768</span>          <span class="cmt"># 32KB</span>\nlinger.ms = <span class="num">10</span>              <span class="cmt"># wait for batch</span>\ncompression.type = snappy   <span class="cmt"># 3-4x reduction</span>\nbuffer.memory = <span class="num">67108864</span>    <span class="cmt"># 64MB total buffer</span></div><p><strong>Compression:</strong> snappy (fastest, ~3x), lz4 (fast, ~4x), gzip (slowest, ~6x), zstd (balanced, ~5x).</p>',
+                  trigger: '"Producer baseline: batch.size=32KB, linger.ms=10, compression=snappy."' },
+                { keyword: 'Consumer Tuning', oneliner: 'max.poll.records, fetch.min.bytes.',
+                  explanation: '<div class="code-block">max.poll.records = <span class="num">500</span>        <span class="cmt"># messages per poll()</span>\nfetch.min.bytes = <span class="num">1024</span>       <span class="cmt"># wait for 1KB</span>\nfetch.max.wait.ms = <span class="num">500</span>      <span class="cmt"># max wait for fetch.min</span></div><p><strong>GC tip:</strong> Lower <code>max.poll.records</code> if seeing long GC pauses.</p>',
+                  trigger: '"max.poll.records limits batch size, fetch.min.bytes batches efficiently."' },
+                { keyword: 'Partition Math', oneliner: 'target / per_consumer = min partitions.',
+                  explanation: '<p><strong>Formula:</strong> <code>partitions \u2265 target_throughput / per_consumer_throughput</code></p><p>Example: 100K msg/sec target, 10K/sec per consumer \u2192 10+ partitions.</p><p>Don\'t over-partition (&gt;50) without clear need. Don\'t under-partition (can\'t add consumers later without breaking key ordering).</p>',
+                  trigger: '"Partition count = target throughput / consumer throughput."' },
+                { keyword: 'Consumer Lag', oneliner: 'Measure in SECONDS, not messages.',
+                  explanation: '<p>Consumer lag = time gap between production and consumption. <strong>Measure in seconds.</strong></p><div class="code-block"><span class="cmt"># Alert thresholds</span>\nWARN:  lag_seconds > <span class="num">30</span>\nCRIT:  lag_seconds > <span class="num">300</span>   <span class="cmt"># 5 minutes</span>\nPAGE:  lag_seconds > <span class="num">900</span>   <span class="cmt"># 15 minutes</span></div><p><strong>Growing lag = investigate immediately.</strong> Steady lag is fine (consumers are behind but keeping pace).</p>',
+                  trigger: '"Consumer lag in seconds is your canary."' },
+                { keyword: 'Incident Playbook', oneliner: 'lag \u2192 consumers \u2192 processing \u2192 GC \u2192 broker.',
+                  explanation: '<p>Systematic debugging:</p><p><strong>1.</strong> Check consumer lag (seconds) — growing or stable?<br><strong>2.</strong> Consumer count vs partition count — consumers &gt; partitions = wasted<br><strong>3.</strong> Profile processing time per message — slow DB? external API?<br><strong>4.</strong> Check GC pauses — causes session timeouts \u2192 rebalancing<br><strong>5.</strong> Broker CPU/disk — if broker is bottleneck, consumer tuning won\'t help</p>',
+                  trigger: '"Incident playbook: lag \u2192 consumer count \u2192 processing latency \u2192 GC pauses \u2192 broker metrics."' }
+            ]
+        },
+        {
+            id: 'outbox-pattern', title: 'Outbox Pattern', icon: '\uD83D\uDCE4', file: '07-outbox-pattern.md',
+            overview: 'Solving the dual-write problem with the transactional outbox pattern — writing business data and events in a single DB transaction, then publishing asynchronously via polling or CDC (Debezium).',
+            usecases: [
+                { title: 'Zalando: Nakadi Event Bus', company: 'Zalando', desc: 'Zalando\'s event bus (Nakadi) uses the outbox pattern internally. Every microservice writes business events to its local outbox table within the same transaction as the domain operation. Nakadi polls these outboxes and publishes to Kafka.' },
+                { title: 'Debezium at WePay', company: 'WePay', desc: 'WePay (acquired by Chase) uses Debezium CDC to capture MySQL binlog changes from outbox tables. This eliminated polling overhead and reduced event publication latency from 500ms to under 50ms for their payment processing pipeline.' }
+            ],
+            subnodes: [
+                { keyword: 'Dual-Write Problem', oneliner: 'DB write + event publish \u2260 atomic.',
+                  explanation: '<p>DB succeeds but event publish fails \u2192 data loss and inconsistency.</p><p><strong>The scenario:</strong> <code>orderRepo.save(order)</code> succeeds \u2192 <code>kafkaTemplate.send("OrderCreated")</code> fails (network blip) \u2192 Order exists but no event emitted \u2192 downstream services never learn about it.</p><p>This is not an edge case — at scale, it happens regularly.</p>',
+                  trigger: '"Dual-write is broken: DB succeeds, event fails \u2192 data loss."' },
+                { keyword: 'The Insight', oneliner: 'Make event PART of the DB transaction.',
+                  explanation: '<p>Insert business fact AND outbox event in the <strong>SAME database transaction</strong>. Either both commit or both roll back.</p><p>Instead of making two systems (DB + Kafka) transactional, make it a single-system problem (just DB). A separate process then publishes to Kafka.</p>',
+                  trigger: '"Events are part of the transaction. Insert order + outbox event = atomic."' },
+                { keyword: 'Outbox Table', oneliner: 'Business write + event write = same txn.',
+                  explanation: '<div class="code-label">OUTBOX TABLE DDL</div><div class="code-block"><span class="kw">CREATE TABLE</span> outbox (\n    id <span class="type">BIGINT</span> <span class="kw">PRIMARY KEY</span> AUTO_INCREMENT,\n    event_type <span class="type">VARCHAR</span>(<span class="num">255</span>) <span class="kw">NOT NULL</span>,\n    aggregate_id <span class="type">VARCHAR</span>(<span class="num">255</span>) <span class="kw">NOT NULL</span>,\n    payload <span class="type">JSON</span> <span class="kw">NOT NULL</span>,\n    published <span class="type">BOOLEAN</span> <span class="kw">DEFAULT FALSE</span>,\n    created_at <span class="type">TIMESTAMP</span> <span class="kw">DEFAULT</span> CURRENT_TIMESTAMP,\n    published_at <span class="type">TIMESTAMP</span> <span class="kw">NULL</span>,\n    <span class="kw">INDEX</span> idx_unpublished (published, created_at)\n);</div><div class="code-label">TRANSACTIONAL SERVICE</div><div class="code-block"><span class="ann">@Transactional</span>\n<span class="kw">public</span> Order createOrder(CreateOrderRequest req) {\n    Order order = orderRepo.save(<span class="kw">new</span> Order(req));\n\n    <span class="cmt">// SAME transaction as business write</span>\n    outboxRepo.save(<span class="kw">new</span> OutboxEvent(\n        <span class="str">"OrderCreated"</span>,\n        order.getId().toString(),\n        objectMapper.writeValueAsString(order)\n    ));\n\n    <span class="kw">return</span> order;\n    <span class="cmt">// Both committed atomically</span>\n}</div>',
+                  trigger: '"Outbox table: same transaction updates business state and inserts event record."',
+                  usecases: [
+                    { title: 'E-commerce Order + Event', company: 'Retail', desc: 'Order creation and event insertion happen in one <code>@Transactional</code> method. If the DB fails mid-write, neither the order nor the event persists — zero inconsistency.' }
+                  ] },
+                { keyword: 'Poller / CDC', oneliner: 'Background process reads outbox \u2192 broker.',
+                  explanation: '<div class="code-block"><span class="ann">@Scheduled</span>(fixedDelay = <span class="num">100</span>)  <span class="cmt">// every 100ms</span>\n<span class="kw">public void</span> pollAndPublish() {\n    List&lt;OutboxEvent&gt; events = outboxRepo\n        .findByPublishedFalse(PageRequest.of(<span class="num">0</span>, <span class="num">100</span>));\n\n    <span class="kw">for</span> (OutboxEvent event : events) {\n        <span class="kw">try</span> {\n            kafkaTemplate.send(\n                event.getEventType(),\n                event.getAggregateId(),\n                event.getPayload()\n            ).get(<span class="num">5</span>, SECONDS);\n\n            event.setPublished(<span class="kw">true</span>);\n            outboxRepo.save(event);\n        } <span class="kw">catch</span> (Exception e) {\n            log.warn(<span class="str">"Retry next poll"</span>);\n        }\n    }\n}</div>',
+                  trigger: '"Poller reads unpublished outbox events, publishes to Kafka."' },
+                { keyword: 'Polling vs Debezium', oneliner: 'Simple vs low-latency. Choose for SLA.',
+                  explanation: '<p><strong>Polling:</strong> Query outbox every 100ms. Simple. Adds latency + DB load.</p><p><strong>Debezium (CDC):</strong> Captures DB WAL/binlog. Near-zero latency. Higher ops cost.</p><p>\u2022 <strong>Latency:</strong> Polling ~100-500ms, CDC ~10-50ms<br>\u2022 <strong>DB load:</strong> Polling adds queries, CDC reads WAL (zero query overhead)<br>\u2022 <strong>Ops:</strong> Polling is trivial, CDC needs Debezium + Kafka Connect</p><p><strong>Start with polling. Migrate to CDC when latency SLA demands it.</strong></p>',
+                  trigger: '"Polling is simple. Debezium is lower latency but higher overhead."' },
+                { keyword: 'Consumer Idempotency', oneliner: 'Duplicates are EXPECTED, not edge cases.',
+                  explanation: '<p>Outbox poller may publish the same event twice on crash. <strong>This is normal.</strong></p><p>Design consumers to dedup by event ID. Monitor outbox lag:</p><div class="code-block"><span class="ann">@Scheduled</span>(fixedDelay = <span class="num">60000</span>)\n<span class="kw">public void</span> monitorOutboxLag() {\n    <span class="kw">long</span> count = outboxRepo.countByPublishedFalse();\n    <span class="kw">if</span> (count > <span class="num">10000</span>) {\n        alerting.notify(<span class="str">"Outbox lag: "</span> + count);\n    }\n}</div>',
+                  trigger: '"Duplicates from outbox poller are normal. Consumers must be idempotent."' }
+            ]
+        },
+        {
+            id: 'saga-pattern', title: 'Saga Pattern', icon: '\uD83D\uDD04', file: '08-saga-pattern.md',
+            overview: 'Managing distributed transactions without 2PC — choreography vs orchestration, compensating transactions, and idempotency keys. The saga pattern is the go-to answer for "how do you handle transactions across microservices?"',
+            usecases: [
+                { title: 'Uber: Trip Lifecycle Saga', company: 'Uber', desc: 'Uber\'s trip lifecycle (match driver \u2192 charge rider \u2192 pay driver \u2192 update ratings) is orchestrated as a saga. If payment fails after the trip, a compensating transaction refunds the rider and adjusts the driver\'s pending payout.' },
+                { title: 'Amazon: Order Fulfillment', company: 'Amazon', desc: 'Amazon\'s order fulfillment uses saga orchestration: Reserve inventory \u2192 Charge payment \u2192 Schedule shipping \u2192 Notify customer. Each step has a compensating transaction. The orchestrator tracks state in DynamoDB with idempotency keys to handle retries.' },
+                { title: 'Airbnb: Booking Saga', company: 'Airbnb', desc: 'Airbnb\'s booking process (hold dates \u2192 charge guest \u2192 notify host \u2192 confirm booking) uses choreography for the happy path and orchestration for compensation when a step fails.' }
+            ],
+            subnodes: [
+                { keyword: 'The Problem', oneliner: 'Distributed txn across services. 2PC fails.',
+                  explanation: '<p>Distributed transactions are hard. <strong>2PC blocks and doesn\'t scale</strong> — coordinator crash = all participants stuck holding locks.</p><p>Sagas break a distributed transaction into a <strong>sequence of local transactions</strong>, each in a single service, with compensating transactions for rollback.</p><p><strong>Example:</strong> Order Saga: CreateOrder \u2192 ChargePayment \u2192 ReserveStock \u2192 ScheduleShipping. If step 3 fails: RefundPayment \u2192 CancelOrder.</p>',
+                  trigger: '"Distributed txn needs sagas. 2PC is dead at scale."' },
+                { keyword: 'Choreography', oneliner: 'Event chain. No coordinator.',
+                  explanation: '<p>Each service emits events triggering the next step. No central coordinator.</p><p><strong>Flow:</strong> OrderService emits <code>OrderCreated</code> \u2192 PaymentService listens, emits <code>PaymentCharged</code> \u2192 InventoryService listens, emits <code>StockReserved</code> \u2192 ...</p><p><strong>Pros:</strong> No SPOF, simple, fully decoupled.</p><p><strong>Cons:</strong> Hard to understand full flow, hard to debug, difficult to add timeouts.</p>',
+                  trigger: '"Choreography: events trigger steps. Simple architecture, complex to understand."' },
+                { keyword: 'Orchestration', oneliner: 'Central coordinator. Visible but SPOF risk.',
+                  explanation: '<p>Central orchestrator contains flow logic and tracks step status:</p><div class="code-block"><span class="cmt">// Saga state machine</span>\n{\n  <span class="str">"saga_id"</span>: <span class="str">"order-12345"</span>,\n  <span class="str">"status"</span>: <span class="str">"compensating"</span>,\n  <span class="str">"steps"</span>: [\n    { <span class="str">"name"</span>: <span class="str">"CreateOrder"</span>,      <span class="str">"status"</span>: <span class="str">"succeeded"</span> },\n    { <span class="str">"name"</span>: <span class="str">"ChargePayment"</span>,    <span class="str">"status"</span>: <span class="str">"succeeded"</span> },\n    { <span class="str">"name"</span>: <span class="str">"ReserveStock"</span>,     <span class="str">"status"</span>: <span class="str">"failed"</span> },\n    { <span class="str">"name"</span>: <span class="str">"ScheduleShipping"</span>, <span class="str">"status"</span>: <span class="str">"pending"</span> }\n  ]\n}</div><p><strong>Pros:</strong> Full visibility, easy retries/timeouts. <strong>Cons:</strong> Potential SPOF, can become bottleneck.</p>',
+                  trigger: '"Orchestration: central coordinator owns the flow."',
+                  usecases: [
+                    { title: 'Order Fulfillment Orchestrator', company: 'E-commerce', desc: 'A SagaOrchestrator service tracks the order through CreateOrder \u2192 ChargePayment \u2192 ReserveStock \u2192 Ship. State persisted in a saga_instances table. On failure, it walks backward through compensations.' }
+                  ] },
+                { keyword: 'Compensating Txns', oneliner: 'Not rollback \u2014 explicit undo in reverse.',
+                  explanation: '<p>Compensating transactions are <strong>NOT DB rollbacks</strong>. They are explicit business operations that undo effects in reverse order.</p><p>\u2022 CreateOrder \u2192 CancelOrder<br>\u2022 ChargePayment \u2192 RefundPayment<br>\u2022 ReserveStock \u2192 ReleaseStock<br>\u2022 SendEmail \u2192 SendCorrectionEmail</p><p><strong>Some actions aren\'t reversible</strong> (can\'t unsend an email). Use "semantic compensation" — send a correction.</p>',
+                  trigger: '"Compensation isn\'t rollback\u2014it\'s explicit undo in reverse order."' },
+                { keyword: 'The Rule', oneliner: '< 5 services \u2192 choreography. Complex \u2192 orchestration.',
+                  explanation: '<p>\u2022 <strong>&lt; 5 services, linear flow:</strong> Choreography<br>\u2022 <strong>\u2265 5 services, branching, retries:</strong> Orchestration<br>\u2022 <strong>Hybrid:</strong> Orchestration for critical path, choreography for side effects</p><p><strong>Don\'t start with orchestration.</strong> Migrate when choreography becomes unmanageable.</p>',
+                  trigger: '"Choreography for simple linear flows. Orchestration for complex sagas."' },
+                { keyword: 'Idempotency Keys', oneliner: 'hash(saga_id + step_name). Non-negotiable.',
+                  explanation: '<p>Every saga step must be idempotent. Key = <code>hash(saga_id + step_name)</code>.</p><div class="code-block"><span class="cmt">// Compensating transaction with idempotency</span>\nRefundPayment(\n  saga_id: <span class="str">"order-12345"</span>,\n  idempotency_key: hash(<span class="str">"order-12345"</span> + <span class="str">"refund_payment"</span>)\n)\n\n<span class="cmt">// Check before executing</span>\nrefund_id = db.query(\n  <span class="str">"SELECT refund_id FROM refunds WHERE idemp_key = ?"</span>, key\n)\n<span class="kw">if</span> (refund_id exists):\n  <span class="kw">return</span> refund_id  <span class="cmt">// already done</span>\n<span class="kw">else</span>:\n  refund_id = paymentProcessor.refund(amount)\n  db.insert(<span class="str">"refunds"</span>, { idemp_key, refund_id })\n  <span class="kw">return</span> refund_id</div><p><strong>Prevents duplicate refunds</strong> on saga orchestrator retry.</p>',
+                  trigger: '"Idempotency keys: hash(saga_id + step_name). Non-negotiable."' }
+            ]
+        }
+    ]
+};
+
+const COLORS = ['--c0','--c1','--c2','--c3','--c4','--c5','--c6','--c7'];
+const CANVAS_W = 4000, CANVAS_H = 3000;
+const CENTER = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
+const BRANCH_RADIUS = 420, SUB_RADIUS = 170;
+let zoom = 1, panX = 0, panY = 0, isDragging = false, dragStartX, dragStartY;
+let expandedBranch = null, branchEls = [], subNodeEls = {};
+const mdCache = {}; // Cache fetched markdown content
+
+function init() {
+    renderCenterHub(); renderBranches(); drawConnections();
+    setupPanZoom(); setupKeyboard(); setupSearch(); loadProgress();
+    fitToScreen(); updateMinimap();
+}
+
+function renderCenterHub() {
+    const hub = document.getElementById('centerHub');
+    hub.style.left = CENTER.x + 'px'; hub.style.top = CENTER.y + 'px';
+    hub.style.transform = 'translate(-50%, -50%)';
+    hub.innerHTML = '<div class="center-hub-title">Event-Driven<br/>Design</div><div class="center-hub-sub">8 topics \u00B7 52 concepts</div>';
+    hub.onclick = fitToScreen;
+}
+
+function renderBranches() {
+    const layer = document.getElementById('branchLayer');
+    const subLayer = document.getElementById('subNodeLayer');
+    mindmapData.branches.forEach((branch, idx) => {
+        const angle = (360 / mindmapData.branches.length) * idx - 90;
+        const rad = angle * Math.PI / 180;
+        const x = CENTER.x + BRANCH_RADIUS * Math.cos(rad);
+        const y = CENTER.y + BRANCH_RADIUS * Math.sin(rad);
+        const colorVar = COLORS[idx];
+        const color = getComputedStyle(document.documentElement).getPropertyValue(colorVar).trim();
+
+        const el = document.createElement('div');
+        el.className = 'branch-node'; el.id = 'branch-' + idx;
+        el.style.left = x + 'px'; el.style.top = y + 'px';
+        el.style.transform = 'translate(-50%, -50%)';
+        el.style.borderColor = color;
+        el.style.animationDelay = (idx * 0.07) + 's';
+        el.innerHTML = '<div class="branch-icon">' + branch.icon + '</div>' +
+            '<div class="branch-title" style="color:' + color + '">' + branch.title + '</div>' +
+            '<div class="branch-count">' + branch.subnodes.length + ' concepts</div>' +
+            '<div class="branch-check" data-idx="' + idx + '" onclick="event.stopPropagation(); toggleBranchCheck(' + idx + ')"></div>' +
+            '<div class="branch-info" data-idx="' + idx + '" onclick="event.stopPropagation(); openBranchDetail(' + idx + ')" title="View details">\u2139</div>';
+        el.addEventListener('click', () => { toggleBranch(idx); openBranchDetail(idx); });
+        layer.appendChild(el);
+        branchEls.push({ el, branch, idx, x, y, angle, color });
+
+        subNodeEls[idx] = [];
+        branch.subnodes.forEach((sub, si) => {
+            const subEl = document.createElement('div');
+            subEl.className = 'sub-node';
+            const bgColor = getComputedStyle(document.documentElement).getPropertyValue(colorVar + '-bg').trim();
+            const borderColor = getComputedStyle(document.documentElement).getPropertyValue(colorVar + '-border').trim();
+            subEl.style.borderColor = borderColor || color;
+            subEl.style.background = bgColor || '#fff';
+            subEl.innerHTML = '<div class="sub-node-keyword" style="color:' + color + '">' + sub.keyword + '</div><div class="sub-node-one">' + sub.oneliner + '</div>';
+            subEl.addEventListener('click', (e) => { e.stopPropagation(); openSubDetail(sub, color, branch.file); });
+            subLayer.appendChild(subEl);
+            subNodeEls[idx].push({ el: subEl, data: sub, branchIdx: idx });
+        });
+    });
+}
+
+// ===== BRANCH TOGGLE =====
+function toggleBranch(idx) {
+    if (expandedBranch === idx) { hideSubNodes(idx); expandedBranch = null; branchEls[idx].el.classList.remove('expanded'); drawConnections(); return; }
+    if (expandedBranch !== null) { hideSubNodes(expandedBranch); branchEls[expandedBranch].el.classList.remove('expanded'); }
+    expandedBranch = idx; branchEls[idx].el.classList.add('expanded');
+    showSubNodes(idx); drawConnections();
+}
+function showSubNodes(idx) {
+    const { x, y, angle } = branchEls[idx]; const subs = subNodeEls[idx]; const count = subs.length;
+    const fanSpan = Math.min(160, count * 25); const startAngle = angle - fanSpan / 2;
+    subs.forEach((s, i) => {
+        const a = count === 1 ? angle : startAngle + (fanSpan / (count - 1)) * i;
+        const rad = a * Math.PI / 180;
+        s.el.style.left = (x + SUB_RADIUS * Math.cos(rad)) + 'px';
+        s.el.style.top = (y + SUB_RADIUS * Math.sin(rad)) + 'px';
+        s.computedX = x + SUB_RADIUS * Math.cos(rad);
+        s.computedY = y + SUB_RADIUS * Math.sin(rad);
+        setTimeout(() => s.el.classList.add('visible'), i * 40);
+    });
+}
+function hideSubNodes(idx) { subNodeEls[idx].forEach(s => s.el.classList.remove('visible')); }
+function collapseAll() { if (expandedBranch !== null) { hideSubNodes(expandedBranch); branchEls[expandedBranch].el.classList.remove('expanded'); expandedBranch = null; drawConnections(); } }
+
+// ===== SVG =====
+function drawConnections() {
+    const svg = document.getElementById('connections'); svg.innerHTML = '';
+    branchEls.forEach(({ x, y, color }) => { svg.appendChild(mkPath(CENTER.x, CENTER.y, x, y, color, false)); });
+    if (expandedBranch !== null) {
+        const b = branchEls[expandedBranch];
+        subNodeEls[expandedBranch].forEach(s => { if (s.computedX) svg.appendChild(mkPath(b.x, b.y, s.computedX, s.computedY, b.color, true)); });
+    }
+}
+function mkPath(x1, y1, x2, y2, color, active) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', 'M' + x1 + ',' + y1 + ' C' + (x1 + dx * 0.4) + ',' + y1 + ' ' + (x1 + dx * 0.6) + ',' + y2 + ' ' + x2 + ',' + y2);
+    p.setAttribute('class', 'conn-line' + (active ? ' active' : '')); p.setAttribute('stroke', color); return p;
+}
+
+// ===== PAN & ZOOM =====
+function setupPanZoom() {
+    document.body.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.toolbar,.progress-bar,.detail-panel,.detail-overlay,.minimap,.branch-node,.sub-node,.center-hub')) return;
+        isDragging = true; dragStartX = e.clientX - panX; dragStartY = e.clientY - panY; document.body.classList.add('dragging');
+    });
+    document.body.addEventListener('mousemove', (e) => { if (!isDragging) return; panX = e.clientX - dragStartX; panY = e.clientY - dragStartY; applyTransform(); updateMinimap(); });
+    document.body.addEventListener('mouseup', () => { isDragging = false; document.body.classList.remove('dragging'); });
+    document.body.addEventListener('wheel', (e) => {
+        if (e.target.closest('.detail-panel')) return;
+        e.preventDefault();
+        if (e.ctrlKey || e.metaKey) {
+            const d = e.deltaY > 0 ? 0.9 : 1.1; const nz = Math.max(0.2, Math.min(3, zoom * d));
+            const mx = e.clientX, my = e.clientY;
+            panX = mx - (mx - panX) * (nz / zoom); panY = my - (my - panY) * (nz / zoom); zoom = nz;
+        } else { panX -= e.deltaX || 0; panY -= e.deltaY || 0; }
+        applyTransform(); updateMinimap();
+    }, { passive: false });
+}
+function applyTransform() { document.getElementById('canvas').style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoom + ')'; document.getElementById('zoomLabel').textContent = Math.round(zoom * 100) + '%'; }
+function zoomIn() { zoom = Math.min(3, zoom * 1.2); applyTransform(); updateMinimap(); }
+function zoomOut() { zoom = Math.max(0.2, zoom / 1.2); applyTransform(); updateMinimap(); }
+function fitToScreen() { const vw = window.innerWidth, vh = window.innerHeight; const span = (BRANCH_RADIUS + SUB_RADIUS + 150) * 2; zoom = Math.min(vw / span, vh / span) * 0.85; panX = vw / 2 - CENTER.x * zoom; panY = vh / 2 - CENTER.y * zoom; applyTransform(); updateMinimap(); }
+
+// ===== MINIMAP =====
+function updateMinimap() {
+    const c = document.getElementById('minimapCanvas').getContext('2d'); const w = 360, h = 240; const s = Math.min(w / CANVAS_W, h / CANVAS_H);
+    c.clearRect(0, 0, w, h); c.fillStyle = '#f5f3ef'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#333'; c.beginPath(); c.arc(CENTER.x * s, CENTER.y * s, 4, 0, Math.PI * 2); c.fill();
+    branchEls.forEach(({ x, y, color }) => { c.strokeStyle = color; c.lineWidth = 1; c.beginPath(); c.moveTo(CENTER.x * s, CENTER.y * s); c.lineTo(x * s, y * s); c.stroke(); c.fillStyle = color; c.beginPath(); c.arc(x * s, y * s, 3, 0, Math.PI * 2); c.fill(); });
+    const vp = document.getElementById('minimapViewport');
+    vp.style.left = ((-panX / zoom) * s) + 'px'; vp.style.top = ((-panY / zoom) * s) + 'px';
+    vp.style.width = ((window.innerWidth / zoom) * s) + 'px'; vp.style.height = ((window.innerHeight / zoom) * s) + 'px';
+}
+
+// ===== BRANCH-LEVEL DETAIL PANEL =====
+function openBranchDetail(idx) {
+    const branch = mindmapData.branches[idx];
+    const color = branchEls[idx].color;
+    document.getElementById('detailKeyword').textContent = branch.icon + ' ' + branch.title;
+    document.getElementById('detailKeyword').style.color = color;
+    document.getElementById('detailOneliner').textContent = branch.subnodes.length + ' concepts \u00B7 ' + branch.file;
+    const body = document.getElementById('detailBody');
+    let html = '';
+    // Overview
+    html += '<div class="detail-section"><div class="detail-toggle open" onclick="toggleSection(this)"><span class="toggle-arrow">\u25B6</span> Overview</div><div class="toggle-content open"><div class="toggle-inner"><p>' + branch.overview + '</p></div></div></div>';
+    // Use cases
+    if (branch.usecases && branch.usecases.length) {
+        html += '<div class="detail-section"><div class="detail-toggle open" onclick="toggleSection(this)"><span class="toggle-arrow">\u25B6</span> Real-World Use Cases</div><div class="toggle-content open"><div class="toggle-inner">';
+        branch.usecases.forEach(uc => { html += '<div class="usecase-card"><div class="usecase-title">' + uc.title + '</div><div class="usecase-company">' + uc.company + '</div><div class="usecase-desc">' + uc.desc + '</div></div>'; });
+        html += '</div></div></div>';
+    }
+    // Sub-concepts list
+    html += '<div class="detail-section"><div class="detail-toggle open" onclick="toggleSection(this)"><span class="toggle-arrow">\u25B6</span> Concepts (' + branch.subnodes.length + ')</div><div class="toggle-content open"><div class="toggle-inner">';
+    branch.subnodes.forEach(sub => {
+        html += '<div style="padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="closeDetail();setTimeout(function(){openSubDetail(mindmapData.branches[' + idx + '].subnodes.find(s=>s.keyword===\'' + sub.keyword.replace(/'/g, "\\'") + '\'),\'' + color + '\',\'' + branch.file + '\')},350)"><strong style="color:' + color + '">' + sub.keyword + '</strong> <span style="color:var(--text-muted);font-size:12px">\u2014 ' + sub.oneliner + '</span></div>';
+    });
+    html += '</div></div></div>';
+    // Full article from markdown
+    html += '<div class="detail-section"><div class="detail-toggle" onclick="toggleSection(this); loadMarkdown(\'' + branch.file + '\', \'md-container-branch-' + idx + '\')"><span class="toggle-arrow">\u25B6</span> Full Article from ' + branch.file + '</div><div class="toggle-content"><div class="toggle-inner"><div id="md-container-branch-' + idx + '" class="md-content"><div class="md-loading">Click to load full article...</div></div></div></div></div>';
+    // Link
+    html += '<a class="full-article-link" href="' + branch.file + '" target="_blank">\uD83D\uDCD6 Open ' + branch.file + ' in new tab \u2192</a>';
+    // Confidence
+    const conf = getConfidence(branch.title);
+    html += '<div class="confidence"><span class="confidence-label">Confidence:</span>' + [1,2,3,4,5].map(i => '<span class="star ' + (i <= conf ? 'filled' : '') + '" onclick="setConfidence(\'' + branch.title.replace(/'/g, "\\'") + '\',' + i + ')">\u2605</span>').join('') + '</div>';
+    body.innerHTML = html;
+    document.getElementById('detailPanel').classList.add('open');
+    document.getElementById('detailOverlay').classList.add('open');
+    document.getElementById('detailPanel').scrollTop = 0;
+}
+
+// ===== SUB-NODE DETAIL PANEL =====
+function openSubDetail(sub, color, file) {
+    document.getElementById('detailKeyword').textContent = sub.keyword;
+    document.getElementById('detailKeyword').style.color = color;
+    document.getElementById('detailOneliner').textContent = sub.oneliner;
+    const conf = getConfidence(sub.keyword);
+    let html = '';
+    // Deep Dive
+    html += '<div class="detail-section"><div class="detail-toggle open" onclick="toggleSection(this)"><span class="toggle-arrow">\u25B6</span> Deep Dive</div><div class="toggle-content open"><div class="toggle-inner">' + sub.explanation + '</div></div></div>';
+    // Real-world use cases
+    if (sub.usecases && sub.usecases.length) {
+        html += '<div class="detail-section"><div class="detail-toggle open" onclick="toggleSection(this)"><span class="toggle-arrow">\u25B6</span> Real-World Use Cases</div><div class="toggle-content open"><div class="toggle-inner">';
+        sub.usecases.forEach(uc => { html += '<div class="usecase-card"><div class="usecase-title">' + uc.title + '</div><div class="usecase-company">' + uc.company + '</div><div class="usecase-desc">' + uc.desc + '</div></div>'; });
+        html += '</div></div></div>';
+    }
+    // Interview trigger
+    html += '<div class="detail-section"><div class="detail-toggle" onclick="toggleSection(this)"><span class="toggle-arrow">\u25B6</span> Interview Trigger Phrase</div><div class="toggle-content"><div class="toggle-inner"><div class="trigger-callout" style="background:color-mix(in srgb, ' + color + ' 8%, white);border-left-color:' + color + '">' + sub.trigger + '</div></div></div></div>';
+    // Full article from markdown
+    const mdContId = 'md-container-' + sub.keyword.replace(/[^a-zA-Z0-9]/g, '-');
+    html += '<div class="detail-section"><div class="detail-toggle" onclick="toggleSection(this); loadMarkdown(\'' + file + '\', \'' + mdContId + '\')"><span class="toggle-arrow">\u25B6</span> Full Article (' + file + ')</div><div class="toggle-content"><div class="toggle-inner"><div id="' + mdContId + '" class="md-content"><div class="md-loading">Click to load full article...</div></div></div></div></div>';
+    // Link
+    html += '<a class="full-article-link" href="' + file + '" target="_blank">\uD83D\uDCD6 Open ' + file + ' in new tab \u2192</a>';
+    // Confidence
+    html += '<div class="confidence"><span class="confidence-label">Confidence:</span>' + [1,2,3,4,5].map(i => '<span class="star ' + (i <= conf ? 'filled' : '') + '" onclick="setConfidence(\'' + sub.keyword.replace(/'/g, "\\'") + '\',' + i + ')">\u2605</span>').join('') + '</div>';
+    document.getElementById('detailBody').innerHTML = html;
+    document.getElementById('detailPanel').classList.add('open');
+    document.getElementById('detailOverlay').classList.add('open');
+    document.getElementById('detailPanel').scrollTop = 0;
+}
+
+// ===== LOAD MARKDOWN AT RUNTIME =====
+async function loadMarkdown(file, containerId) {
+    const container = document.getElementById(containerId);
+    if (!container || container.dataset.loaded === 'true') return;
+    container.innerHTML = '<div class="md-loading">Loading ' + file + '...</div>';
+    try {
+        // Try fetch (works on GitHub Pages and local servers)
+        const resp = await fetch(file);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const md = await resp.text();
+        mdCache[file] = md;
+        container.innerHTML = marked.parse(md);
+        container.dataset.loaded = 'true';
+    } catch (e) {
+        // If fetch fails (e.g., file:// protocol), check cache
+        if (mdCache[file]) {
+            container.innerHTML = marked.parse(mdCache[file]);
+            container.dataset.loaded = 'true';
+        } else {
+            container.innerHTML = '<div class="md-error">Could not load ' + file + ' (' + e.message + ').<br>This works on GitHub Pages or a local server. For now, <a href="' + file + '" target="_blank" style="color:#2980b9">open the file directly \u2192</a></div>';
+        }
+    }
+}
+
+function closeDetail() { document.getElementById('detailPanel').classList.remove('open'); document.getElementById('detailOverlay').classList.remove('open'); }
+function toggleSection(el) { el.classList.toggle('open'); el.nextElementSibling.classList.toggle('open'); }
+
+// ===== CONFIDENCE =====
+function getConfidence(kw) { try { return (JSON.parse(localStorage.getItem('edd-confidence') || '{}'))[kw] || 0; } catch { return 0; } }
+function setConfidence(kw, level) {
+    try { const d = JSON.parse(localStorage.getItem('edd-confidence') || '{}'); d[kw] = level; localStorage.setItem('edd-confidence', JSON.stringify(d));
+    document.querySelectorAll('.confidence .star').forEach((s, i) => s.classList.toggle('filled', i < level)); } catch {}
+}
+
+// ===== PROGRESS =====
+function loadProgress() { try { const done = JSON.parse(localStorage.getItem('edd-progress') || '[]'); done.forEach(idx => { const c = document.querySelector('.branch-check[data-idx="' + idx + '"]'); if (c) { c.classList.add('done'); c.textContent = '\u2713'; } }); updateProgressBar(done.length); } catch {} }
+function toggleBranchCheck(idx) { try { let done = JSON.parse(localStorage.getItem('edd-progress') || '[]'); const c = document.querySelector('.branch-check[data-idx="' + idx + '"]'); if (done.includes(idx)) { done = done.filter(i => i !== idx); c.classList.remove('done'); c.textContent = ''; } else { done.push(idx); c.classList.add('done'); c.textContent = '\u2713'; } localStorage.setItem('edd-progress', JSON.stringify(done)); updateProgressBar(done.length); } catch {} }
+function updateProgressBar(count) { document.getElementById('progressFill').style.width = ((count / mindmapData.branches.length) * 100) + '%'; document.getElementById('progressText').textContent = count + ' / ' + mindmapData.branches.length + ' reviewed'; }
+function resetProgress() { localStorage.removeItem('edd-progress'); localStorage.removeItem('edd-confidence'); document.querySelectorAll('.branch-check').forEach(c => { c.classList.remove('done'); c.textContent = ''; }); updateProgressBar(0); }
+
+// ===== SEARCH =====
+function setupSearch() { document.getElementById('searchInput').addEventListener('input', function() {
+    const q = this.value.trim().toLowerCase();
+    if (!q) { document.querySelectorAll('.branch-node,.sub-node').forEach(el => el.classList.remove('search-match','search-dim')); return; }
+    branchEls.forEach(({ el, branch, idx }) => { const bm = branch.title.toLowerCase().includes(q); let any = false;
+        subNodeEls[idx].forEach(s => { const sm = s.data.keyword.toLowerCase().includes(q) || s.data.oneliner.toLowerCase().includes(q); s.el.classList.toggle('search-match', sm); s.el.classList.toggle('search-dim', !sm); if (sm) any = true; });
+        el.classList.toggle('search-match', bm || any); el.classList.toggle('search-dim', !bm && !any); });
+}); }
+
+// ===== KEYBOARD =====
+function setupKeyboard() { document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key >= '1' && e.key <= '8') { const i = parseInt(e.key) - 1; if (i < mindmapData.branches.length) toggleBranch(i); }
+    if (e.key === 'Escape') closeDetail();
+    if (e.key === '/') { e.preventDefault(); document.getElementById('searchInput').focus(); }
+    if (e.key === '0') fitToScreen();
+    // Shift+number opens branch detail
+    if (e.shiftKey && e.key >= '!' && e.key <= '*') { const map = {'!':0,'@':1,'#':2,'$':3,'%':4,'^':5,'&':6,'*':7}; if (map[e.key] !== undefined) openBranchDetail(map[e.key]); }
+}); }
+
+window.addEventListener('load', init);
+window.addEventListener('resize', updateMinimap);
+</script>
+</body>
+</html>

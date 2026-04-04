@@ -30,9 +30,11 @@
 
 ---
 
-## Interactive View
+## Interactive Views
 
-> Open [kafka-knowledge-graph.html](./kafka-knowledge-graph.html) for a single-page dark-themed interactive version with progress tracking.
+> **[revision-mindmap.html](./revision-mindmap.html)** — Miro-style pan/zoom mind map with detail panels, runtime markdown rendering, real-world use cases, and confidence tracking. Best for revision and self-assessment.
+>
+> [kafka-knowledge-graph.html](./kafka-knowledge-graph.html) — Single-page dark-themed interactive version with progress tracking.
 
 ---
 

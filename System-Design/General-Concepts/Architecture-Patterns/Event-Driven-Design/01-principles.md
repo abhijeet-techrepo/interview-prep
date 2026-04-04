@@ -6,6 +6,67 @@ Event-driven architecture represents a fundamental shift in how systems think ab
 
 ---
 
+## Quick Revision Map
+
+> Scan the keywords. If you can explain the one-liner, skip to the next. If not, click the link for the full story.
+
+```
+                    ┌──────────────────────────────────────────┐
+                    │    EVENT-DRIVEN DESIGN: 10 PRINCIPLES    │
+                    └────────────────────┬─────────────────────┘
+                                         │
+          ┌──────────────────────────────┼──────────────────────────────┐
+          │                              │                              │
+    COMMUNICATION                      DATA                      CONSISTENCY
+    ──────────────                ──────────────              ────────────────
+    1. Async Comms                3. Immutability             5. Eventual
+       fire-and-forget               append-only log            consistency
+       decouple timing               audit trail                not immediate
+                                                                 but bounded
+    2. Loose Coupling             4. Single Responsibility
+       schema is the              6. Event Ordering
+       only contract                 one event = one fact        per-partition
+       producers ≠ consumers         composable                  not global
+          │                              │                              │
+          └──────────────────────────────┼──────────────────────────────┘
+                                         │
+          ┌──────────────────────────────┼──────────────────────────────┐
+          │                              │                              │
+      RESILIENCE                    EVOLUTION                    ANTI-PATTERNS
+    ──────────────              ────────────────              ────────────────
+    7. Idempotency              10. Schema Versioning         Choreography
+       same msg 2x =               evolve without                spiral
+       same result                  breaking consumers         Logic in events
+                                                               Payload bloat
+    8. Observability            USE WHEN:                      No DLQ
+       correlation IDs          → multi-service reactions      Circular deps
+       trace everything         → independent deploy           Timestamp
+                                → audit trail needed              ordering
+    9. Backpressure             AVOID WHEN:
+       graceful overload        → simple CRUD
+       don't drop, queue        → strong consistency needed
+```
+
+### Jump to Section
+
+| # | Principle | One-Liner Trigger | Deep Dive |
+|---|-----------|-------------------|-----------|
+| 1 | **Async Communication** | email vs phone call; fire event, don't wait | [→ details](#1-asynchronous-communication) |
+| 2 | **Loose Coupling** | schema is the only contract between services | [→ details](#2-loose-coupling) |
+| 3 | **Event Immutability** | append-only facts; never mutate, only amend | [→ details](#3-event-immutability) |
+| 4 | **Single Responsibility** | one event = one business fact, composable | [→ details](#4-single-responsibility) |
+| 5 | **Eventual Consistency** | not immediate, but bounded and predictable | [→ details](#5-eventual-consistency) |
+| 6 | **Event Ordering** | per-partition guarantee, NOT global | [→ details](#6-event-ordering--guarantees) |
+| 7 | **Idempotent Processing** | same message twice → same result; dedup key | [→ details](#7-idempotent-processing) |
+| 8 | **Observable Event Flow** | correlation ID on every event; trace everything | [→ details](#8-observable-event-flow) |
+| 9 | **Backpressure Handling** | don't drop under load; queue, slow, or shed | [→ details](#9-backpressure-handling) |
+| 10 | **Schema Versioning** | evolve events without breaking consumers | [→ details](#10-event-versioning--schema-evolution) |
+| — | **Common Mistakes** | 10 anti-patterns with root cause and fix | [→ details](#common-mistakes--how-to-avoid-them) |
+| — | **Decision Framework** | when to use EDA vs when to avoid it | [→ details](#decision-framework-when-to-use-event-driven-architecture) |
+| — | **Interview Answer** | 60-second architect-level response | [→ details](#interview-tip) |
+
+---
+
 ## Understanding the Mental Model
 
 Before diving into individual principles, let's establish why event-driven design matters. In traditional architectures, Service A calls Service B which calls Service C. Each service waits for a response. This creates tight coupling — if B changes its API, A breaks. It also creates cascading failures — if C is slow, A waits, and your system degrades.

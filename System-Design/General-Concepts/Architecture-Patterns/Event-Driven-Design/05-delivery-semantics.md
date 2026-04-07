@@ -1,858 +1,742 @@
 # Event Delivery Semantics: Getting the Guarantees Right
 
-The first question any architect must ask when designing an event-driven system isn't about technology—it's about loss. What happens when a message disappears? This decision—at-most-once, at-least-once, or exactly-once—shapes everything downstream: your consumer logic, your monitoring strategy, your data pipeline, your financial exposure. Choose wrong, and you don't find out until 3am when you're reconciling missing transactions.
+> "The question isn't whether duplicates or losses will happen—it's which one breaks your business more. Architecture is choosing the right failure mode."
 
-→ Back to [Event-Driven Design](./README.md)
+[← Back to Event-Driven Design](./README.md) | **Related:** [Kafka Configs](./04-kafka-configs.md) · [Outbox Pattern](./07-outbox-pattern.md)
+
+---
+
+## Quick Revision Mind Map
+
+```mermaid
+mindmap
+  root((Delivery Semantics))
+    At-Most-Once
+      Fire and Forget
+      acks=0
+      Loss is silent
+      Use cases
+        Metrics
+        Telemetry
+        Dashboards
+    At-Least-Once
+      Producer retries
+      acks=all
+      Consumer duplicates
+      Idempotent handlers
+      Use cases
+        Orders
+        Transactions
+        Critical operations
+    Exactly-Once
+      Kafka transactions
+      Producer idempotence
+      Transactional writes
+      High complexity
+      Use cases
+        Financial
+        Compliance
+        Ledgers
+    Decision Framework
+      Cost of loss vs duplication
+      Downstream idempotency
+      Latency tolerance
+      Complexity budget
+```
 
 ---
 
 ## Why Delivery Semantics Are the First Architectural Decision
 
-I once deployed an order service with at-most-once delivery because I thought we were building "fast analytics." The team didn't realize it until we compared order counts between Kafka and the database three weeks later: 0.3% of orders had vanished. Not failed—vanished. The customer support team had to manually refund customers whose orders they could never prove existed. That was a $40K mistake in a single incident.
+I once deployed an order service with at-most-once delivery believing we were building "fast analytics." Three weeks later, reconciliation revealed 0.3% of orders had vanished from Kafka entirely while sitting in the database. Customer support had to manually refund customers for orders the system could never prove existed. That single incident cost $40K and shattered trust in the analytics layer for months.
 
-Delivery semantics isn't a configuration detail you inherit from your message broker's defaults. It's a **fundamental architectural choice** that trades off between:
+Delivery semantics isn't a configuration you inherit from broker defaults. It's a fundamental architectural choice that trades off between availability, durability, performance, and complexity. Different systems need different answers, and the wrong answer reveals itself only in production, at scale, when you're reconciling data at 3am.
 
-- **Availability** (can we keep serving if something breaks?)
-- **Durability** (will messages survive broker crashes?)
-- **Idempotence** (can we safely process the same message twice?)
-- **Latency** (how fast can we acknowledge success?)
+### The Cost of Getting It Wrong
 
-Different systems need different answers. A real-time dashboard can afford to lose events. A payment system cannot. And most systems—the ones nobody talks about in architecture forums—need something in between. Let's walk through each semantic as a story of what actually happens to messages in production.
+The costs of poor semantic selection manifest in different ways:
+
+**At-most-once failures** arrive silently. You don't know data is missing until you compare counts between systems weeks later. By then, the lost data is gone, customers are confused, and your audit trail is broken.
+
+**At-least-once failures** cause duplicate processing—two fulfillments for one order, double inventory reservation, duplicate charges. These are visible and loud, and they're easier to debug because the message is in Kafka for replay. The cost is operational complexity in handling duplicates gracefully.
+
+**Exactly-once over-engineering** wastes latency and throughput on guarantees you don't need. Financial systems require it. Most don't. The overhead ranges from 5-50ms per message and can reduce throughput by 30-40% depending on configuration.
+
+### The Three Guarantees at a Glance
+
+| Semantic | Guarantee | What Can Happen | Risk | Typical Overhead |
+|----------|-----------|-----------------|------|------------------|
+| **At-Most-Once** | Message delivered 0 or 1 times | Messages lost silently if broker crashes before replication | Silent data loss, broken audit trails, reconciliation gaps | None—fastest |
+| **At-Least-Once** | Message delivered 1+ times | Duplicates if consumer crashes before offset commit | Duplicate processing, requires idempotent consumers | 5-10% latency/throughput |
+| **Exactly-Once** | Message delivered and processed exactly 1 time | None—duplicates prevented by transactions | Complexity, operational burden, latency hit | 20-50% latency, 30-40% throughput |
 
 ---
 
-## At-Most-Once: The Fire-and-Forget System
+## At-Most-Once: Fire and Forget
+
+### How It Works
+
+The producer sends a message and immediately returns control without waiting for acknowledgment. The broker receives the event, adds it to memory, and returns "success." If the broker crashes before flushing to disk, the event is lost permanently. No retry, no exception, no visible failure.
+
+The consumer subscribes with auto-commit enabled and processes messages as they arrive. If the consumer crashes during processing, the offset has already been committed, so the message is never redelivered. Loss is permanent but invisible.
 
 ### The Story of a Lost Message
 
-Picture an analytics event flowing through your system:
+Follow this analogy: You mail a postcard to a friend without tracking. The postal worker accepts it, puts it on a cart, and tells you "delivered." But that cart is hit by a bus before it leaves the depot. The postcard never arrived, you never found out, and your friend never knows you tried to contact them.
 
-1. Your mobile app fires a page-view event: `{"user_id": 1047, "page": "checkout", "timestamp": "2026-04-03T14:22:15Z"}`
-2. The app doesn't wait for acknowledgment—it's configured with `acks=0` in Kafka. The network packet arrives at the broker.
-3. The broker receives it, adds it to an in-memory buffer, and immediately returns "OK" to the producer.
-4. The broker **hasn't written to disk yet**. It's sitting in RAM, waiting to be flushed to the log segment files.
-5. At that exact moment, the broker's power supply fails. The machine goes dark.
-6. The entire event is gone. It never made it to disk. It never made it to any replica.
-7. Your dashboard shows page views for every other user but mysteriously skips user 1047's checkout event.
+In Kafka terms:
 
-At-most-once is not "no loss guarantee"—it's "I won't acknowledge the same message twice." The loss is silent. You'll never know it happened unless you're comparing the source system's counts to Kafka's counts after the fact.
+1. Your mobile app publishes a page-view event with `acks=0` (no acknowledgment required).
+2. The broker receives it, holds it in memory, and immediately returns "OK."
+3. At that moment, the broker's power supply fails. The machine goes dark.
+4. The event never writes to disk, never replicates to another broker, simply evaporates.
+5. Your analytics dashboard counts are mysteriously off, but you won't discover this for days during reconciliation.
 
 ### When At-Most-Once Makes Sense
 
-This is the right choice precisely when duplicates are **worse than loss**:
+This semantic is correct precisely when duplicates are **worse** than losses:
 
-- **Real-time dashboards**: If a page-view metric is 999 instead of 1000, nobody notices. If a number appears twice simultaneously for the same user, the dashboard looks broken.
-- **Approximate metrics**: Counting unique visitors, trending topics, heat maps. You're building a 95% accurate picture, not a legal record.
-- **Telemetry pipelines**: Application performance monitoring, log aggregation. Individual lost events don't matter; patterns do.
-- **One-way fire-and-forget commands**: "Log this user action" where the primary record is elsewhere.
+**Metrics and analytics:** A page-view count of 999 instead of 1000 is acceptable noise. A count appearing twice simultaneously is a data quality disaster that breaks dashboards.
+
+**Non-critical notifications:** "Here's a summary of your activity" notifications don't require guaranteed delivery. If one is lost, the user gets another tomorrow.
+
+**High-frequency sensor data:** Real-time monitoring systems generating millions of data points per second can afford to lose individual readings. The aggregate patterns matter, not completeness.
+
+**Telemetry and observability:** Log aggregation and APM tools collect data for pattern detection. Individual lost entries don't affect trend analysis.
+
+### The Configuration
+
+- **Producer:** `acks=0`, no retries
+- **Consumer:** `enable.auto.commit=true`, no manual acknowledgment
+- **Broker:** Default replication factor (usually 1)
+
+At-most-once is the only semantic where you truly get "fire and forget" performance.
 
 ### Why Most Teams Think They Want This (But Don't)
 
-The latency argument is seductive: "We'll get the absolute fastest throughput with at-most-once." But here's the architect's truth—you almost never have `acks=0` at scale. Why? Because you discover data loss when it breaks something downstream, and then you're scrambling.
+The latency seduction is real: "At-most-once is fastest, so let's use it everywhere." But here's the architect's truth—at scale, this fails at your first outage. Why?
 
-Consider an e-commerce analytics pipeline: at-most-once is fine for event ingestion. But when marketing asks "How many users completed checkout?" and your answer differs from the order database by 0.5%, you've just broken trust in your entire analytics layer. You'll spend weeks debugging, then you'll migrate to at-least-once. Why not start there?
+Because you discover data loss when something breaks downstream. The Order Service reports $100K in daily revenue. Analytics shows $99.7K. Is the $300 difference a rounding error or a real problem? Now you're auditing. Now you're correlating logs. Now you're debugging.
 
-> [!NOTE]
-> **Configuration:** Kafka with `acks=0` and auto-ack consumer mode, RabbitMQ with no publisher confirms, AWS SNS with fire-and-forget.
+The latency advantage over at-least-once is negligible in practice (5-10ms at most). The debugging cost is enormous. Start with at-least-once. Only drop to at-most-once when you've measured that the latency matters and duplicates don't.
 
 ---
 
-## At-Least-Once: The Workhorse Default
+## At-Least-Once: The Production Default
+
+### How It Works
+
+The producer waits for acknowledgment from all in-sync replicas before returning success (`acks=all`). This ensures the message is durable across the cluster. The consumer manually commits its offset only after successfully processing the message. If the consumer crashes during processing, the offset commit never happens, and the message is redelivered when the consumer restarts.
+
+The result: durability is guaranteed, but duplicates are possible. That's a feature, not a bug.
 
 ### The Story of a Duplicate
 
-Let's follow a different journey—one where durability actually matters:
+Follow an order through the system:
 
-1. Your Order Service publishes an "OrderCreated" event with `acks=all`. The broker replicates it to three replicas and acknowledges the producer: "I have three copies."
-2. The producer sleeps peacefully—the message is durable.
-3. A consumer in the Order Fulfillment Service picks it up: `{orderId: "ORD-4847", amount: 49.99, ...}`
-4. The consumer processes it: queries inventory, reserves stock, writes the fulfillment record to its database, commits the record.
-5. The consumer is about to commit its Kafka offset (the "I've processed up to message N" marker) when—network hiccup.
-6. The offset commit fails. The process crashes 100ms later.
-7. The consumer restarts. Kafka has no record that message ORD-4847 was processed (the offset commit never happened).
-8. It delivers the message again. ORD-4847 is processed a **second time**.
-9. Inventory is reserved twice. The second fulfillment request hits the database.
+1. Order Service publishes "OrderCreated" with `acks=all`. It waits for three replicas to confirm. The producer's `send()` call returns successfully.
+2. Fulfillment Service consumes the event: reserves inventory, writes a fulfillment record to its database, prepares to commit the offset.
+3. At that moment—network hiccup. The offset commit request never reaches the broker.
+4. The Fulfillment Service crashes.
+5. When it restarts, Kafka has no record that this message was processed (the offset commit was never acknowledged).
+6. The message is redelivered.
+7. The Fulfillment Service processes it again: reserves inventory a second time.
+8. Now inventory is overbooked.
 
-At-least-once guarantees durability: the message will be delivered at least once, and possibly more than once if something breaks during processing.
+This is at-least-once delivery: the message was delivered at least once and possibly more than once. The message stayed in Kafka, allowing replay and recovery. But the consumer had to handle the duplicate gracefully.
 
 ### Why This Is the Right Default for 90% of Systems
 
-At-least-once + idempotent consumer is the Goldilocks zone. You get:
+At-least-once + idempotent consumer is the Goldilocks zone:
 
-- **Durability**: Messages survive broker crashes and network partitions.
-- **Availability**: You don't need complex transactions or coordination.
-- **Performance**: No significant latency overhead compared to fire-and-forget.
-- **Debuggability**: If something goes wrong, every event is in Kafka for replay.
+- **Durability:** Messages survive broker crashes, network partitions, and producer failures.
+- **Availability:** You don't need distributed transactions or complex coordination protocols.
+- **Replay-ability:** Every message stays in Kafka, allowing you to reprocess the entire topic from any point in time.
+- **Operability:** When something goes wrong, you have complete visibility into every event that flowed through the system.
+- **Performance:** Minimal latency overhead compared to at-most-once.
 
-The trade-off is simple: **duplicates will happen, and your consumer must handle them gracefully**. That's not a bug; it's a feature. It lets you decouple producer reliability from consumer logic.
+The trade-off is straightforward: your consumers must be idempotent. They must handle duplicates correctly.
 
-### The Idempotent Consumer Pattern: Three Implementation Approaches
+### The Duplicate Problem: Where and Why It Happens
 
-When a duplicate arrives, your consumer must recognize it and skip reprocessing. Here are three approaches, each with different trade-offs:
+```mermaid
+sequenceDiagram
+    participant P as Producer
+    participant B as Broker
+    participant C as Consumer
+    participant DB as Database
 
-#### Approach 1: Database Unique Constraint (The Simple Way)
+    P->>B: send(message)
+    B->>B: replicate to all ISRs
+    B-->>P: ack (durable)
+    P->>P: return success
 
-**How it works:** Store a processed message ID in your database with a unique constraint. When a duplicate arrives, the database insertion fails, and you've already logged the original result.
+    C->>B: fetch(offset=100)
+    B-->>C: message
 
-**The narrative:** You have an `orders` table. You add an `idempotency_key` column with a unique index. When processing OrderCreated events, you insert both the order record AND an idempotency record in the same transaction. If a duplicate arrives, the unique constraint violation tells you it's already processed.
+    C->>DB: INSERT order
+    DB-->>C: ok
+    C->>C: prepare offset commit
 
-```sql
--- During processing:
-BEGIN TRANSACTION
-  INSERT INTO idempotency_log (message_id, processed_at) VALUES ('msg-847', NOW());
-  INSERT INTO orders (order_id, amount, ...) VALUES ('ORD-4847', 49.99, ...);
-COMMIT;
+    C->>B: commit_offset(101)
+    Note over B,C: Network failure here
+    B->>B: crash before persisting
+    C->>C: crash during error handling
 
--- On duplicate arrival, the first INSERT fails:
--- Error: duplicate key value violates unique constraint "idempotency_log_pkey"
--- Consumer catches this, skips processing, and returns success.
+    Note over C: Restart
+
+    C->>B: fetch(offset=100)
+    B-->>C: message (offset never committed)
+    C->>DB: INSERT order
+    Note over C,DB: DUPLICATE!
 ```
 
-**Trade-offs:**
-- ✓ Simple: leverage database ACID semantics you already have
-- ✓ Transactional: offset commit happens atomically with processing
-- ✗ Scale limited: unique constraint is a hot spot with high throughput (100k+ msgs/sec per consumer)
-- ✗ TTL nightmare: when do you delete old idempotency records to prevent the table growing forever?
+Duplicates happen in three scenarios:
 
-#### Approach 2: Redis SET (The Cache Way)
+1. **Consumer crash before offset commit:** The message is processed, the database write succeeds, but the offset commit fails. On restart, the broker redelivers the message.
 
-**How it works:** Use Redis to check if a message ID has been processed recently. If it's there, skip processing. If not, process and add it to Redis with a TTL.
+2. **Rebalancing:** When a consumer joins or leaves the group, a rebalance occurs. During rebalancing, the most-recently-committed offset may lag behind the most-recently-processed offset, causing redelivery after rebalance completes.
 
-**The narrative:** You have a Redis instance. Every processed message ID goes into a set with a 24-hour TTL. When a message arrives, you do a quick `SISMEMBER` check. If it's there, skip. Otherwise, process and call `SADD`. Fast, scalable, and the oldest entries automatically expire.
+3. **Producer retries:** If a producer's first send fails with a network error and it retries, the message might be duplicated if the first send actually succeeded but the ack was lost.
+
+The impact of duplicates is business logic dependent. For payment processing, a duplicate is catastrophic. For inventory reservations, it's visible (you can detect and refund). For event sourcing, duplicates are benign if handled correctly.
+
+### Making At-Least-Once Safe: The Idempotent Consumer
+
+When duplicates arrive, your consumer must recognize and skip them. Three approaches exist, each with different trade-offs.
+
+#### Approach 1: Database Unique Constraint (The Simple Path)
+
+**Implementation:** Store a message identifier in your database with a unique constraint. When a duplicate arrives, the constraint violation tells you it's already processed.
 
 ```java
-public void processOrder(OrderEvent event) {
-    String messageId = event.getMessageId();
+// Spring Boot + JPA
+@Entity
+@Table(name = "orders")
+public class Order {
+    @Id
+    private String orderId;
 
-    // Check if already processed in Redis
-    if (redisClient.isMember("processed_orders", messageId)) {
-        log.info("Duplicate detected: {}", messageId);
-        return;  // Skip processing
+    @Column(unique = true, nullable = false)
+    private String messageId;  // Unique constraint on message ID
+
+    private BigDecimal amount;
+    private String customerId;
+
+    // ... getters, setters
+}
+
+@Service
+public class OrderConsumer {
+    @Autowired
+    private OrderRepository orderRepository;
+
+    @KafkaListener(topics = "orders", groupId = "order-group")
+    public void consumeOrder(OrderEvent event) {
+        try {
+            Order order = new Order();
+            order.setOrderId(event.getOrderId());
+            order.setMessageId(event.getMessageId()); // Kafka record key or header
+            order.setAmount(event.getAmount());
+            order.setCustomerId(event.getCustomerId());
+
+            orderRepository.save(order); // Unique constraint enforced here
+
+        } catch (DataIntegrityViolationException e) {
+            // Duplicate detected; already processed, safe to skip
+            log.info("Duplicate message: {}", event.getMessageId());
+        }
     }
-
-    // Process the order
-    Order order = orderService.createOrder(event);
-
-    // Mark as processed (expires in 24 hours)
-    redisClient.addToSet("processed_orders", messageId, 86400);
 }
 ```
 
-**Trade-offs:**
-- ✓ Fast: O(1) lookups, orders of magnitude faster than database
-- ✓ Scales: handles millions of events per second per Redis instance
-- ✓ Auto-cleanup: TTL means no manual garbage collection
-- ✗ Eventual consistency: Redis crash before persistence means replays
-- ✗ Unbounded growth: memory usage grows with your event volume (though TTL bounds it)
-- ✗ Requires separate system: another dependency to operate and monitor
+**Trade-Offs:**
+- **Pros:** Simple, requires no external services, the database constraint is permanent
+- **Cons:** Creates extra columns and indexes; slows INSERT; requires handling constraint violation exceptions in application code
+- **Best for:** Smaller systems (< 1M events/day), where database write latency isn't the bottleneck
 
-#### Approach 3: Dedicated Deduplication Store (The Enterprise Way)
+#### Approach 2: Redis Deduplication Cache (The High-Throughput Path)
 
-**How it works:** A separate table in your database, designed purely for deduplication, with indexes optimized for lookup and cleanup.
-
-**The narrative:** You have a `message_dedup` table with columns: `(message_id, consumer_group, processed_at)` and a compound index on `(message_id, consumer_group)`. This table is designed specifically for this job—it's not mixed with order data, inventory data, or anything else. You can partition it by date, archive old partitions, and manage lifecycle cleanly.
-
-```sql
-CREATE TABLE message_dedup (
-    message_id VARCHAR(255),
-    consumer_group VARCHAR(100),
-    processed_at TIMESTAMP,
-    PRIMARY KEY (message_id, consumer_group),
-    INDEX idx_cleanup (processed_at)  -- For TTL-based cleanup
-);
-
--- Check and record in one transaction
-BEGIN TRANSACTION
-  INSERT IGNORE INTO message_dedup (message_id, consumer_group, processed_at)
-  VALUES ('msg-847', 'order-fulfillment', NOW());
-
-  -- If insert returned 1 row, this is a new message
-  IF LAST_INSERT_ID() > 0 THEN
-    -- Process order
-  ELSE
-    -- Skip (already processed)
-  END IF
-COMMIT;
-
--- Cleanup old records (run nightly)
-DELETE FROM message_dedup
-WHERE processed_at < NOW() - INTERVAL 7 DAY;
-```
-
-**Trade-offs:**
-- ✓ Explicit: single-purpose table, easy to understand and monitor
-- ✓ Controllable lifecycle: you decide when records are deleted
-- ✓ Queryable: can query duplicate patterns and replay scenarios
-- ✗ More complex: requires separate DDL and schema management
-- ✗ Slower than Redis: still database I/O, though faster than complex inserts
-- ✗ Still a hot spot: all deduplication queries hit this table
-
-### When Your Dedup Store Goes Down
-
-Here's the scenario every architect dreads: your Redis instance storing deduplication keys goes down. Do you lose data?
-
-**The answer depends on your architecture:**
-
-If you're using **Approach 2 (Redis)** and Redis crashes:
-- Inflight requests fail and retry (good)
-- But messages that were marked as processed are now gone from Redis
-- When they retry, you can't tell they're duplicates anymore
-- **They get reprocessed**, which means duplicate orders, duplicate charges
-
-This is why you **never use Redis alone for deduplication**. Instead, use it as a **fast cache on top of the database**:
+**Implementation:** Before processing, check a Redis cache for the message ID. If present, skip. If absent, process and add to cache.
 
 ```java
-public void processOrder(OrderEvent event) {
-    String messageId = event.getMessageId();
+@Service
+public class OrderConsumerWithRedis {
+    @Autowired
+    private OrderRepository orderRepository;
 
-    // Fast path: check Redis cache first
-    if (redisCache.contains(messageId)) {
-        return;  // Already processed, skip
-    }
+    @Autowired
+    private StringRedisTemplate redisTemplate;
 
-    // Slow path: check database (truth of record)
-    if (idempotencyStore.exists(messageId)) {
-        // Cache miss but DB has it—refill Redis and return
-        redisCache.add(messageId);
-        return;
-    }
+    private static final String DEDUP_KEY_PREFIX = "dedup:order:";
+    private static final long DEDUP_TTL_SECONDS = 86400; // 24 hours
 
-    // New message—process it
-    Order order = orderService.createOrder(event);
-    idempotencyStore.save(messageId, order.getId());
-    redisCache.add(messageId);  // Warm the cache
-}
-```
+    @KafkaListener(topics = "orders", groupId = "order-group")
+    public void consumeOrder(OrderEvent event) {
+        String deduplicationKey = DEDUP_KEY_PREFIX + event.getMessageId();
 
-Now you have **durability from the database** and **speed from Redis**. If Redis crashes, the database has your back.
-
-### Spring Kafka with Idempotent Consumer: A Production Example
-
-Here's what this looks like in real code. Every decision has a narrative—comments explain the "why," not just the "what":
-
-```java
-@Component
-@RequiredArgsConstructor
-public class OrderEventConsumer {
-
-    private final OrderService orderService;
-    private final IdempotencyRepository idempotencyRepo;
-    private final RedisCacheClient redisCache;
-    private static final String DEDUP_CACHE_KEY = "processed_order:";
-
-    @KafkaListener(
-        topics = "order-events",
-        groupId = "order-fulfillment-service",
-        containerFactory = "kafkaListenerContainerFactory"
-    )
-    @Transactional  // Ensures atomicity of processing + offset commit
-    public void processOrderEvent(
-            ConsumerRecord<String, OrderEvent> record,
-            Acknowledgment acknowledgment) {
-
-        String messageId = extractMessageId(record);
-        OrderEvent event = record.value();
+        // Check if already processed
+        Boolean alreadyProcessed = redisTemplate.hasKey(deduplicationKey);
+        if (alreadyProcessed != null && alreadyProcessed) {
+            log.info("Duplicate detected in Redis: {}", event.getMessageId());
+            return; // Skip duplicate
+        }
 
         try {
-            // Step 1: Fast-path duplicate check (Redis cache)
-            // Why Redis first? 99% of messages are new, and Redis is 10x faster
-            String cacheKey = DEDUP_CACHE_KEY + messageId;
-            if (redisCache.hasKey(cacheKey)) {
-                log.info("Duplicate detected via cache: {}", messageId);
-                // Still commit offset—we've handled this message
-                acknowledgment.acknowledge();
-                return;
-            }
+            // Process the order
+            Order order = new Order();
+            order.setOrderId(event.getOrderId());
+            order.setAmount(event.getAmount());
+            orderRepository.save(order);
 
-            // Step 2: Slow-path duplicate check (Database—source of truth)
-            // Why the database? If Redis crashes, we don't lose durability
-            Optional<IdempotencyRecord> existing =
-                idempotencyRepo.findByMessageId(messageId);
-
-            if (existing.isPresent()) {
-                log.info("Duplicate detected in database: {}", messageId);
-                // Warm the cache for future lookups
-                redisCache.set(cacheKey, "true", Duration.ofDays(7));
-                acknowledgment.acknowledge();
-                return;
-            }
-
-            // Step 3: Process the order (business logic)
-            // This is the expensive part—queries, validations, writes
-            Order createdOrder = orderService.createOrder(event);
-
-            // Step 4: Record that we've processed this message
-            // Why save idempotency BEFORE committing offset? Ordering matters.
-            // If we crash between the service call and the idempotency save,
-            // we want to reprocess, not skip.
-            IdempotencyRecord record = new IdempotencyRecord()
-                .setMessageId(messageId)
-                .setOrderId(createdOrder.getId())
-                .setProcessedAt(Instant.now());
-            idempotencyRepo.save(record);
-
-            // Step 5: Warm the Redis cache for future requests
-            // 7-day TTL—old messages get expired automatically
-            redisCache.set(cacheKey, "true", Duration.ofDays(7));
-
-            // Step 6: Acknowledge offset consumption
-            // This is the final act. If we crash before this, we reprocess.
-            // If we crash after, we skip the redelivery (good).
-            acknowledgment.acknowledge();
-
-            log.info("Order processed successfully: {} -> {}",
-                messageId, createdOrder.getId());
+            // Mark as processed in Redis
+            redisTemplate.opsForValue().set(
+                deduplicationKey,
+                "processed",
+                Duration.ofSeconds(DEDUP_TTL_SECONDS)
+            );
 
         } catch (Exception e) {
-            // Processing failed—don't acknowledge offset
-            // The broker will redeliver this message
-            log.error("Failed to process order event: {}", messageId, e);
-
-            // Decide whether to retry immediately or send to DLQ
-            if (isRetryable(e)) {
-                // Let Kafka retry (Spring will handle redelivery)
-                throw new RetryableKafkaException("Transient error, will retry", e);
-            } else {
-                // Unrecoverable error—send to Dead Letter Topic
-                // This prevents the consumer group from stalling
-                publishToDeadLetterTopic(record, e);
-                acknowledgment.acknowledge();  // Move on, log the failure
-            }
+            log.error("Failed to process order: {}", event.getOrderId(), e);
+            throw e; // Trigger retry; don't mark as processed
         }
-    }
-
-    private String extractMessageId(ConsumerRecord<String, OrderEvent> record) {
-        // Message ID should be in headers (added by producer)
-        RecordHeader headerValue = record.headers()
-            .lastHeader("X-Message-ID");
-        if (headerValue == null) {
-            // Fallback: generate from event data (less reliable)
-            return UUID.nameUUIDFromBytes(
-                record.value().toString().getBytes()).toString();
-        }
-        return new String(headerValue.value());
-    }
-
-    private boolean isRetryable(Exception e) {
-        return e instanceof TemporaryDataAccessException
-            || e instanceof TimeoutException
-            || (e.getCause() != null && isRetryable(e.getCause()));
-    }
-
-    private void publishToDeadLetterTopic(
-            ConsumerRecord<String, OrderEvent> record,
-            Exception e) {
-        // Send to a special DLQ topic for manual inspection
-        kafkaTemplate.send("order-events-dlq",
-            record.key(),
-            new DeadLetterMessage(record.value(), e.getMessage()));
     }
 }
 ```
 
-**Why each decision matters:**
+**TTL Strategy:** Set Redis TTL based on your system's expected recovery time. If a consumer crashes and takes 24 hours to come back online, use 24+ hour TTL. If it's 1 minute, use 1 hour.
 
-1. **Redis first, database second**: You want to fail fast on 99% of requests (cache hits). Database is your fallback for cache misses or when Redis goes down.
+**Trade-Offs:**
+- **Pros:** Faster than database checks; scales to millions of events/second; doesn't slow database writes
+- **Cons:** Redis is an additional service to operate; cache misses during crashes allow duplicates; eventual consistency (brief window where duplicates possible)
+- **Best for:** High-throughput systems (> 10K events/second), where database write latency is critical
 
-2. **Transaction boundary**: Everything from duplicate check to offset commit is in one `@Transactional` block. If something fails, the entire operation rolls back and the offset isn't committed.
+#### Approach 3: Dual-Layer Deduplication (The Resilient Path)
 
-3. **Idempotency recorded before offset commit**: You commit the idempotency key to the database first. Then you acknowledge the offset. This ordering prevents the edge case where you acknowledge but crash before saving the idempotency key.
-
-4. **Message ID in headers**: The producer must attach a unique message ID (usually UUID or request correlation ID) in the Kafka record headers. This is not negotiable—it's the entire foundation of deduplication.
-
-5. **Throwable vs. recoverable errors**: Some errors (database connection timeout) are worth retrying. Some (malformed JSON) are not. You need to distinguish or you'll poison your Kafka consumer group.
-
----
-
-## Exactly-Once: The Holy Grail with a Price Tag
-
-### The Story of a Guaranteed Transaction
-
-Now we're in the world of **payment processing**. At-least-once with duplicates is not acceptable here:
-
-1. Customer submits payment: "Charge my card $100 for Order #12345"
-2. Payment Service publishes "PaymentProcessed" event with exactly-once semantics enabled
-3. The producer includes `transactional.id = "payment-service-instance-1"`, `enable.idempotence = true`, and waits for `acks = all`
-4. Kafka broker deduplicates based on producer ID + sequence number. If the same producer tries to send the same sequence number twice, the broker rejects it.
-5. Consumer picks up the "PaymentProcessed" event
-6. Consumer checks: "Have I processed this payment ID before?" (checks in database)
-7. If yes: skip (idempotent consumer pattern again)
-8. If no: Update the customer's account balance, mark the payment as confirmed, commit the offset—**all in one atomic transaction**
-9. If the consumer crashes before committing, the offset was never updated, and on restart, it processes the payment again. But step 7 catches it as a duplicate.
-
-Exactly-once combines **idempotent producer** (broker deduplication) + **idempotent consumer** (database deduplication) + **transactions** (atomicity). Every layer has its guard rail.
-
-### How Exactly-Once Works in Kafka
-
-Let's walk through the mechanics because the details matter:
-
-**Producer side (Idempotent Producer):**
-```properties
-# Configuration
-enable.idempotence = true           # Enable producer deduplication
-transactional.id = "payment-svc-1"  # Unique ID per producer instance
-acks = all                          # Wait for all replicas
-min.insync.replicas = 2             # Require ≥2 replicas for acks=all
-```
-
-The producer assigns a sequence number to every message and includes the producer ID. Kafka's broker tracks the highest sequence number it's seen from each producer. If a retry arrives with a lower or duplicate sequence number, the broker deduplicates it—the message is added to the partition only once.
-
-**Consumer side (Transactional Read):**
-```properties
-isolation.level = read_committed    # Only consume committed messages
-enable.auto.commit = false          # Manual offset management
-max.poll.records = 100              # Control batch size for atomicity
-```
-
-`isolation.level = read_committed` means the consumer only reads messages from producers that have committed their transaction. It won't read in-flight or aborted messages.
-
-**The Transaction Boundary:**
-```java
-@Transactional  // Spring + Kafka transaction coordinator
-public void processPayment(PaymentEvent event) {
-    // This entire method is one atomic unit
-    // If any step fails, all database changes roll back
-    // The offset commit ALSO rolls back
-
-    String paymentId = event.getPaymentId();
-
-    // Step 1: Check idempotency (consumer-side)
-    if (paymentRepository.existsByPaymentId(paymentId)) {
-        return;  // Already processed
-    }
-
-    // Step 2: Update account balance
-    Account account = accountRepository.findById(event.getAccountId());
-    account.addBalance(event.getAmount());
-    accountRepository.save(account);
-
-    // Step 3: Record the payment
-    Payment payment = new Payment()
-        .setPaymentId(paymentId)
-        .setAmount(event.getAmount())
-        .setStatus("CONFIRMED");
-    paymentRepository.save(payment);
-
-    // Step 4: Offset commit happens automatically at transaction end
-    // If we crash before this line, transaction rolls back
-}
-```
-
-Here's the key: The database transaction and the Kafka offset commit are **coordinated by a transaction coordinator**. They both succeed or both fail. This is why you get exactly-once: the record exists in your database **if and only if** the offset was committed.
-
-### Performance Trade-offs: The Real Cost
-
-Exactly-once sounds amazing until you run it on production traffic. Here's what happens:
-
-```
-At-Least-Once (baseline):
-- Throughput: 100,000 messages/sec per consumer
-- P99 latency: 45ms
-- CPU: 40%
-
-Exactly-Once:
-- Throughput: 50,000 messages/sec per consumer
-- P99 latency: 180ms
-- CPU: 75%
-```
-
-Why the slowdown? Several reasons:
-
-1. **Synchronous flush to disk**: The transaction coordinator must flush its state to disk before acknowledging a committed transaction. That's blocking I/O.
-
-2. **Reduced batching**: Transactions often can't batch across message boundaries (you can't merge two customers' payments into one transaction). Smaller batches = more network round-trips.
-
-3. **Broker overhead**: Kafka maintains transaction state on every broker replica. The "transaction log" itself is a partition that must be written durably.
-
-4. **Idempotent producer overhead**: The producer tracks sequence numbers and retries carefully. That's more bookkeeping.
-
-Is this a show-stopper? Not always. If you're processing 10,000 payments/second and your target throughput is 50,000/sec, the overhead is fine. But if you're trying to process 500,000 messages/sec and exactly-once cuts you to 250,000/sec, you're in trouble.
-
-### When Exactly-Once Is Worth It
-
-Ask yourself: **Is the cost of a duplicate greater than the cost of the performance penalty?**
-
-- **Payments**: Yes. A duplicate charge is unrecoverable customer pain + refund costs + regulatory scrutiny. 50% throughput loss is acceptable.
-- **Inventory updates**: Yes. A duplicate inventory deduction causes overselling and broken promises to customers.
-- **Financial transfers**: Yes. Duplicating a $1M transfer is catastrophic.
-- **Account balance modifications**: Yes. Every balance write must be exactly-once.
-- **Legal holds / compliance records**: Yes. Audit requirements mandate exactness.
-
-### When Exactly-Once Is Overengineered
-
-- **Analytics pipelines**: Duplicate events in analytics are visible (you see two page views from the same user at the same time) but not catastrophic. The data is still useful.
-- **Real-time dashboards**: Approximate counts are fine; the latency penalty isn't worth it.
-- **Metrics aggregation**: If you're summing counters anyway, duplicates add a small error margin. Not worth the cost.
-- **Log aggregation**: Storage is cheap; losing logs is bad but not financially catastrophic.
-- **Event sourcing with separate query models**: If you're building separate read models asynchronously, at-least-once + idempotent consumer is sufficient.
-
-### Kafka Transactional API: The Full Picture
-
-Here's what a transactional consumer looks like, step by step:
+**When to use:** When your deduplication cache (Redis) can fail, and you need bulletproof dedup. This approach combines both layers: Redis for speed, database constraint for durability.
 
 ```java
-@Component
-public class PaymentProcessor {
+@Service
+public class OrderConsumerDualLayer {
+    @Autowired
+    private OrderRepository orderRepository;
 
-    @KafkaListener(topics = "payment-events", groupId = "payment-processor")
-    public void processPaymentTransactional(ConsumerRecord<String, PaymentEvent> record) {
+    @Autowired
+    private StringRedisTemplate redisTemplate;
 
-        PaymentEvent event = record.value();
-        String paymentId = event.getPaymentId();
+    private static final String DEDUP_KEY_PREFIX = "dedup:order:";
+    private static final long DEDUP_TTL_SECONDS = 86400;
 
+    @KafkaListener(topics = "orders", groupId = "order-group")
+    @Transactional
+    public void consumeOrder(OrderEvent event) {
+        String deduplicationKey = DEDUP_KEY_PREFIX + event.getMessageId();
+
+        // Layer 1: Fast path - check Redis cache
         try {
-            // Check if already processed (prevents duplicate side effects)
-            Payment existing = paymentRepository.findByPaymentId(paymentId);
-            if (existing != null) {
-                log.info("Payment already processed: {}", paymentId);
-                // Don't throw—just return. The offset will still commit.
+            Boolean inCache = redisTemplate.hasKey(deduplicationKey);
+            if (inCache != null && inCache) {
+                log.info("Duplicate detected in cache: {}", event.getMessageId());
                 return;
             }
+        } catch (Exception redisException) {
+            // Redis is down; fall through to Layer 2
+            log.warn("Redis unavailable; falling back to database dedup", redisException);
+        }
 
-            // Process the payment
-            // This is wrapped in a Spring @Transactional boundary
-            processAndPersistPayment(event);
+        try {
+            // Layer 2: Durable path - database unique constraint
+            Order order = new Order();
+            order.setOrderId(event.getOrderId());
+            order.setMessageId(event.getMessageId());
+            order.setAmount(event.getAmount());
 
-            // If we reach here without exception, Spring will:
-            // 1. Commit the database transaction
-            // 2. Commit the Kafka offset
-            // Both succeed or both fail—no half-states
+            orderRepository.save(order);
 
-        } catch (RetryableException e) {
-            // Transient error—let Spring retry
+            // If successful, mark in Redis for future requests
+            try {
+                redisTemplate.opsForValue().set(
+                    deduplicationKey,
+                    "processed",
+                    Duration.ofSeconds(DEDUP_TTL_SECONDS)
+                );
+            } catch (Exception redisException) {
+                // Acceptable to fail silently; database constraint is the safety net
+                log.warn("Failed to update Redis cache; database is authoritative");
+            }
+
+        } catch (DataIntegrityViolationException e) {
+            // Database constraint triggered; duplicate detected and safely skipped
+            log.info("Duplicate detected by database constraint: {}", event.getMessageId());
+        }
+    }
+}
+```
+
+**When you need both layers:** Your deduplication service (Redis/cache) can fail or be unavailable. A crash in your cache service means a brief window where duplicates can slip through. By also putting a unique constraint in the database, you have a permanent fallback.
+
+#### Comparison Matrix
+
+| Approach | Latency | Throughput | Operational Complexity | Dedup Accuracy | Best Use Case |
+|----------|---------|-----------|----------------------|----------------|---------------|
+| **Database Constraint** | High (DB write for every message) | Low (<1K msg/sec) | Low (single service) | 100% durable | Financial systems, small scale |
+| **Redis Cache** | Low (in-memory check) | Very High (>100K msg/sec) | Medium (Redis ops required) | ~99.9% (Redis failures expose duplicates) | High-throughput analytics, > 10K msg/sec |
+| **Dual-Layer** | Low (cache hit path) | Very High (>100K msg/sec) | High (two services to operate) | 99.99% (falls back to database) | Mission-critical high-throughput systems |
+
+### Spring Kafka: Production Idempotent Consumer
+
+The complete pattern in Spring Kafka requires explicit offset management and error handling:
+
+```java
+@Configuration
+@EnableKafka
+public class KafkaConsumerConfig {
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, OrderEvent> kafkaListenerContainerFactory(
+            ConsumerFactory<String, OrderEvent> consumerFactory) {
+        ConcurrentKafkaListenerContainerFactory<String, OrderEvent> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+
+        factory.setConsumerFactory(consumerFactory);
+
+        // Manual acknowledgment: offset commits only after successful processing
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
+
+        return factory;
+    }
+
+    @Bean
+    public ConsumerFactory<String, OrderEvent> consumerFactory() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "order-group");
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false); // Manual commit
+        props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 10); // Process in batches
+
+        return new DefaultConsumerFactory<>(props);
+    }
+}
+
+@Service
+public class OrderConsumerWithDLQ {
+
+    @Autowired
+    private OrderRepository orderRepository;
+
+    @Autowired
+    private KafkaTemplate<String, OrderEvent> kafkaTemplate;
+
+    private static final String DLQ_TOPIC = "orders-dlq";
+
+    @KafkaListener(topics = "orders", groupId = "order-group",
+                   containerFactory = "kafkaListenerContainerFactory")
+    @Transactional
+    public void consumeOrder(OrderEvent event, Acknowledgment ack) {
+        try {
+            // Idempotent processing logic
+            Order order = new Order();
+            order.setOrderId(event.getOrderId());
+            order.setMessageId(event.getMessageId());
+            order.setAmount(event.getAmount());
+
+            orderRepository.save(order); // Unique constraint on messageId
+
+            // Commit offset only after successful processing
+            ack.acknowledge();
+
+        } catch (DataIntegrityViolationException e) {
+            // Duplicate detected; safe to acknowledge
+            log.info("Duplicate order detected: {}", event.getMessageId());
+            ack.acknowledge();
+
+        } catch (Exception e) {
+            // Unrecoverable error; send to DLQ
+            log.error("Failed to process order: {}", event.getOrderId(), e);
+
+            // Don't acknowledge; will be retried
+            sendToDLQ(event, e);
             throw e;
-        } catch (FatalException e) {
-            // Non-recoverable—send to DLQ and move on
-            // DO NOT throw; offset will commit and we skip this message
-            logAndSendToDLQ(record, e);
         }
     }
 
-    @Transactional  // Spans database + Kafka offset
-    private void processAndPersistPayment(PaymentEvent event) {
-        // Calculate new balance
-        Account account = accountRepository.findByIdLocking(event.getAccountId());
-        BigDecimal newBalance = account.getBalance().subtract(event.getAmount());
-
-        // Validate (don't allow negative balance for checking accounts)
-        if (newBalance.compareTo(BigDecimal.ZERO) < 0
-            && account.getType() == AccountType.CHECKING) {
-            throw new FatalException("Insufficient funds");
+    private void sendToDLQ(OrderEvent event, Exception error) {
+        try {
+            kafkaTemplate.send(DLQ_TOPIC,
+                event.getOrderId(),
+                new OrderEventWithError(event, error.getMessage()));
+        } catch (Exception dlqError) {
+            log.error("Failed to send to DLQ", dlqError);
         }
-
-        // Update account
-        account.setBalance(newBalance);
-        accountRepository.save(account);
-
-        // Record the payment
-        Payment payment = new Payment()
-            .setPaymentId(event.getPaymentId())
-            .setAccountId(event.getAccountId())
-            .setAmount(event.getAmount())
-            .setStatus(PaymentStatus.CONFIRMED)
-            .setProcessedAt(Instant.now());
-        paymentRepository.save(payment);
-
-        // Publish confirmation event
-        // This also happens in the same transaction
-        PaymentConfirmedEvent confirmation = new PaymentConfirmedEvent(
-            event.getPaymentId(),
-            newBalance,
-            Instant.now()
-        );
-        kafkaTemplate.send("payment-confirmed-events", confirmation);
     }
 }
 ```
 
-**Critical producer configuration** (sends the confirmation event):
+**Key points:**
+1. **Manual acknowledgment:** `MANUAL` mode ensures offset commits only after successful processing
+2. **Unique constraint:** The database enforces dedup; duplicate inserts fail gracefully
+3. **Error handling:** Exceptions prevent offset commit, triggering retry
+4. **DLQ pattern:** Unrecoverable errors move to a dead-letter queue for human review
+
+### When Your Dedup Store Goes Down: Graceful Degradation
+
+What happens when your Redis cache fails or your database is unavailable? Production systems need graceful degradation:
+
+**Redis unavailable:** The dual-layer approach falls back to database dedup. Latency increases temporarily, but correctness is maintained. DLQ errors should spike during the outage; monitor for this.
+
+**Database unavailable:** This is catastrophic in the dual-layer approach because both layers depend on it. Solution: implement circuit breaker logic that stops consuming until the database is healthy.
+
 ```java
-@Bean
-public ProducerFactory<String, Object> producerFactory() {
-    Map<String, Object> config = new HashMap<>();
-    config.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+@Service
+public class OrderConsumerWithCircuitBreaker {
 
-    // Idempotent producer settings
-    config.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
-    config.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "payment-processor-1");
-    config.put(ProducerConfig.ACKS_CONFIG, "all");
-    config.put(ProducerConfig.RETRIES_CONFIG, Integer.MAX_VALUE);
+    @Autowired
+    private OrderRepository orderRepository;
 
-    // Batching for throughput (but with a time limit)
-    config.put(ProducerConfig.BATCH_SIZE_CONFIG, 32768);
-    config.put(ProducerConfig.LINGER_MS_CONFIG, 10);  // Max 10ms wait for batches
+    @Autowired
+    private StringRedisTemplate redisTemplate;
 
-    return new DefaultProducerFactory<>(config);
-}
-```
+    private final CircuitBreaker circuitBreaker = CircuitBreaker.ofDefaults("order-consumer");
 
-The `TRANSACTIONAL_ID_CONFIG` is crucial: it must be the same for every instance of your producer (for failover and deduplication). If you spin up a second instance, it should have a different transactional ID (like "payment-processor-2").
+    @KafkaListener(topics = "orders", groupId = "order-group")
+    public void consumeOrder(OrderEvent event, Acknowledgment ack) {
+        try {
+            // Attempt to process; if circuit open, throw exception (no offset commit)
+            circuitBreaker.executeCallable(() -> {
+                processOrder(event);
+                ack.acknowledge();
+                return null;
+            });
+        } catch (Exception e) {
+            log.error("Processing failed or circuit open; not acknowledging", e);
+            // Exception prevents offset commit; Kafka will retry
+        }
+    }
 
----
-
-## Comparison: The Mental Model
-
-Here's how I choose which semantic to use:
-
-| Aspect | At-Most-Once | At-Least-Once | Exactly-Once |
-|--------|--------------|---------------|--------------|
-| **Durability** | None (fire-and-forget) | Full (survives crashes) | Full (survives crashes) |
-| **Duplicate Risk** | Zero (unique message max once) | High (message retried on failure) | None (dedup at producer + consumer) |
-| **Latency** | Lowest (45ms) | Medium (60ms) | Highest (180ms+) |
-| **Throughput** | Highest (no coordination) | High (slight acking cost) | Lower (30-50% reduction) |
-| **Consumer Logic** | Simple (no dedup needed) | Medium (idempotent consumer) | Complex (transactions + idempotence) |
-| **Monitoring** | Alert on missing records | Track duplicate rates | Monitor transaction latency |
-| **Cost of Error** | Silent loss | Visible duplicates | Transactions are slow |
-| **Best For** | Analytics, dashboards | Orders, audit logs | Payments, inventory, balances |
-
-**The decision framework I use:**
-
-1. **Do you need durability?** If no → at-most-once. If yes → continue.
-2. **Is a duplicate a disaster?** If yes → exactly-once. If no → at-least-once.
-3. **What's your throughput target?** If exactly-once cuts you in half and that matters → reconsider. Maybe at-least-once is sufficient.
-4. **Can you detect and skip duplicates easily?** If yes → at-least-once. If no (e.g., financial state machines) → exactly-once.
-
----
-
-## Common Pitfalls: The Stories I've Learned
-
-### Pitfall 1: Committing Offset Before Processing
-
-**The Story:** A team configured their Kafka consumer with `enable.auto.commit=true` and a 5-second commit interval. The consumer processed orders, then pushed them to a downstream API. But the API was flaky—occasionally timing out. The offset was already committed by the time the processing failed.
-
-Result: 0.2% of orders got lost every week. They only noticed when the finance team started seeing discrepancies.
-
-**The Fix:**
-```java
-// WRONG: Auto-commit enabled, offset commits every 5 seconds
-@KafkaListener(topics = "orders", groupId = "order-processor",
-    containerFactory = "kafkaListenerContainerFactory")  // auto-commit enabled
-public void processOrder(OrderEvent event) {
-    // Offset might be committed before this finishes
-    orderService.saveToDatabase(event);
-    externalApi.notifyAboutOrder(event);  // If this fails, offset already committed
-}
-
-// RIGHT: Manual offset commit, only after successful processing
-@KafkaListener(topics = "orders", groupId = "order-processor",
-    containerFactory = "kafkaListenerContainerFactoryManualAck")
-public void processOrder(ConsumerRecord<String, OrderEvent> record,
-                        Acknowledgment ack) {
-    try {
-        OrderEvent event = record.value();
-        orderService.saveToDatabase(event);
-        externalApi.notifyAboutOrder(event);
-
-        // Only acknowledge after ALL processing succeeds
-        ack.acknowledge();
-    } catch (Exception e) {
-        // Don't acknowledge—message will be redelivered
-        throw e;
+    private void processOrder(OrderEvent event) {
+        // Implementation from above
     }
 }
 ```
 
-> [!WARNING]
-> **Rule:** Offset commit is the LAST step. Not the first, not the middle. Last. If you commit early, you've lost the message on crash.
+---
 
-### Pitfall 2: No Message ID in Event Headers
+## Exactly-Once Semantics: The Holy Grail
 
-**The Story:** A team built an idempotent consumer that checked for duplicates based on the order ID and timestamp. Seemed reasonable. But in production, they discovered that their legacy order API could create multiple orders with the same ID from different API calls (poor API design). Suddenly, their deduplication was broken.
+### What "Exactly-Once" Actually Means
 
-**The Fix:** Always include a unique message ID generated by the producer:
+Exactly-once is not a single feature. It's three independent features working in concert:
 
-```java
-// Producer side
-@Component
-public class OrderEventProducer {
+1. **Producer idempotence:** Kafka guarantees that no duplicate messages are written to the broker, even if the producer retries.
+2. **Transactional writes:** Multiple writes to different partitions either all succeed or all fail atomically.
+3. **Consumer read-committed isolation:** Consumers read only committed messages, never uncommitted ones.
 
-    public void publishOrderCreated(Order order) {
-        String messageId = UUID.randomUUID().toString();  // Unique per event
+Together, these three properties create exactly-once processing semantics. But achieving this requires careful orchestration on both producer and consumer sides.
 
-        ProducerRecord<String, OrderCreatedEvent> record =
-            new ProducerRecord<>("order-events",
-                order.getId().toString(),
-                new OrderCreatedEvent(order));
+### How Kafka Transactions Work
 
-        // Add message ID to headers
-        record.headers().add(
-            "X-Message-ID",
-            messageId.getBytes(StandardCharsets.UTF_8)
-        );
+```mermaid
+sequenceDiagram
+    participant P as Producer
+    participant TC as Transaction Coordinator
+    participant B as Broker
+    participant C as Consumer
 
-        kafkaTemplate.send(record);
-    }
-}
+    P->>TC: InitProducerId (get producer ID)
+    TC-->>P: producer_id, epoch
 
-// Consumer side
-String messageId = new String(
-    record.headers().lastHeader("X-Message-ID").value()
-);
-idempotencyStore.checkAndRecord(messageId);  // True deduplication
+    P->>B: AddPartitionsToTxn (topics to write)
+    B->>B: mark partitions in transaction
+
+    P->>B: Produce(message, seq_num)
+    Note over B: message buffered; NOT visible to consumers
+
+    P->>B: Produce(message, seq_num)
+    P->>B: EndTxn(COMMIT)
+
+    B->>B: write __transaction_state record
+    B->>B: mark messages as committed
+
+    C->>B: fetch(isolation=read_committed)
+    B-->>C: messages (only committed ones)
 ```
 
-> [!WARNING]
-> **Rule:** Every message must have a globally unique ID in its headers. This is non-negotiable for idempotent consumers.
+**Producer-side idempotence:** Each producer has a unique ID and an epoch. For each topic-partition, the producer includes a sequence number. If a message arrives with sequence_num N and we've already received N, it's discarded as a duplicate. If N < previous_seq, it's rejected as out-of-order.
 
-### Pitfall 3: Assuming Exactly-Once Without Transactions
+**Transactional writes:** The producer buffers all messages within a transaction. They're not visible to consumers until the transaction commits. If the producer fails mid-transaction, the transaction coordinator aborts the transaction, and consumers never see partial results.
 
-**The Story:** A team enabled idempotent producers and thought they had exactly-once. But their consumer was still using `enable.auto.commit=true`. The idempotent producer prevented producer-side duplicates, but the consumer could still process the same message twice if it crashed between processing and committing the offset.
+**Consumer read-committed isolation:** The consumer only reads messages marked as committed by the transaction coordinator. Uncommitted messages are invisible.
 
-They thought they were safe. They weren't.
+The result: end-to-end exactly-once processing. But this coordination has a cost.
 
-**The Fix:** Exactly-once requires BOTH sides:
+### The Performance Cost
 
-```java
-// INCOMPLETE: Producer idempotence alone is not enough
-@Bean
-public ProducerFactory<String, Object> producerFactory() {
-    Map<String, Object> config = new HashMap<>();
-    config.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);  // ✓
-    // But if consumer is auto-committing, you still have duplicates!
-    return new DefaultProducerFactory<>(config);
-}
+#### Latency Impact
 
-// COMPLETE: Producer idempotence + Consumer transactions
-@Bean
-public ProducerFactory<String, Object> producerFactory() {
-    Map<String, Object> config = new HashMap<>();
-    config.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
-    config.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "payment-svc");
-    return new DefaultProducerFactory<>(config);
-}
+Transactional producers require the producer to wait for the transaction coordinator to acknowledge the commit. This introduces 5-20ms of latency per message in typical configurations, depending on network distance to the broker and transaction coordinator load.
 
-@Bean
-public ConsumerFactory<String, PaymentEvent> consumerFactory() {
-    Map<String, Object> config = new HashMap<>();
-    config.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);  // Manual commit
-    config.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
-    return new DefaultConsumerFactory<>(config);
-}
+For batch producers, the overhead per-message is amortized: sending 100 messages in one transaction adds overhead of 10ms / 100 = 0.1ms per message. For real-time, low-latency applications, this is significant.
 
-@KafkaListener(...)
-@Transactional  // Database transaction + offset commit together
-public void processPayment(PaymentEvent event) {
-    // Now you have true exactly-once
-}
-```
+#### Throughput Impact
 
-> [!WARNING]
-> **Rule:** Exactly-once requires coordination between producer and consumer. Idempotence alone is half the picture.
+Transactions serialize message writes for a given producer. A single producer can only have one active transaction at a time. Throughput is reduced by 20-40% compared to at-least-once depending on message batch size and broker configuration.
 
-### Pitfall 4: Mixing Offset Commit Strategies
+A cluster that could ingest 100K events/second with at-least-once might handle only 60K-80K events/second with exactly-once.
 
-**The Story:** A team had one microservice using auto-commit and another using manual commit, both in the same Kafka consumer group. Auto-commit runs on a timer; manual commit happens explicitly. Sometimes auto-commit would fire before the manual commit happened. Race conditions ensued.
+#### Operational Complexity
 
-Result: Messages processed by the manual-commit service would get redelivered to the auto-commit service, creating strange duplicates.
+Exactly-once requires additional broker resources: the transaction coordinator must track the state of every active transaction. Under high concurrency, the coordinator can become a bottleneck. Monitoring is more complex because you now have transaction-level metrics in addition to consumer lag.
 
-**The Fix:** Pick one strategy per consumer group and stick with it:
+Recent improvements in Apache Kafka 4.0+ include Transactions Server Side Defense (KIP-890), which bumps the producer epoch on every transaction to prevent duplicates across transaction boundaries. This strengthens the protocol but adds minimal performance overhead.
 
-```java
-// In your consumer group's Kafka config
-// Option 1: Fully automatic (for simple use cases)
-config.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, true);
-config.put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, 5000);
+### When Exactly-Once Is Worth the Cost
 
-// Option 2: Fully manual (for production systems)
-config.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
-// Explicit ack.acknowledge() in your listener
+**Financial transactions:** Payment processing, fund transfers, accounting ledgers. A duplicate charge is unacceptable. Exactly-once is mandatory.
 
-// NEVER mix—all consumers in the group must use the same strategy
-```
+**Compliance and regulated systems:** Healthcare records, audit logs, legal documents. Duplicates violate compliance requirements. Exactly-once is required.
+
+**Systems without idempotent sinks:** If your downstream system (third-party API, legacy database) can't handle duplicates, you must guarantee exactly-once on the Kafka side.
+
+**High-stakes analytics:** Fraud detection systems where duplicates degrade model quality. Exactly-once improves signal-to-noise ratio.
+
+### When At-Least-Once + Idempotency Wins
+
+In practice, most systems that claim to need exactly-once are better served by at-least-once + idempotent consumers. Here's why:
+
+**Idempotency is cheaper:** A database unique constraint or Redis check is faster than a full transactional pipeline. You pay the cost only for duplicates (rare) rather than for every message (common).
+
+**Operational simplicity:** At-least-once + idempotency is easier to troubleshoot. Every message stays in Kafka for replay. Transactional systems hide messages from consumers during processing.
+
+**Flexibility:** With idempotent consumers, different downstream systems can handle duplicates differently. Some might deduplicate, others might be truly idempotent. Transactions force a single strategy.
+
+**Scalability:** Idempotent consumers scale linearly. Exactly-once transactions can bottleneck on the transaction coordinator, especially in large clusters.
+
+The industry consensus (circa 2024-2026) has shifted toward at-least-once + idempotency for most systems. Netflix, Stripe, and LinkedIn all rely on this pattern rather than end-to-end exactly-once.
 
 ---
 
-## The Decision Framework for Architects
+## The Decision Framework
 
-When you're designing a new service, walk through this checklist:
+### Decision Tree
 
-**Step 1: Understand the business impact**
-- "What happens if an event is lost?" (Financial loss? Customer confusion? Data accuracy issue?)
-- "What happens if an event is processed twice?" (Duplicate charge? Duplicate entry? Double-count?)
-- "How quickly do we need to detect the problem?" (Real-time alerting or daily reconciliation?)
+```mermaid
+flowchart TD
+    A["Can your consumer be truly idempotent?<br/>(same message twice = same result once)"]
+    A -->|Yes| B["Is your throughput requirement > 10K msg/sec?"]
+    A -->|No| C["Can your sink be made idempotent<br/>(with IDs, upserts, etc)?"]
 
-**Step 2: Choose the semantic**
+    B -->|Yes| D["Use At-Least-Once<br/>+ Redis Cache"]
+    B -->|No| E["Use At-Least-Once<br/>+ Database Constraint"]
 
-```
-Is data loss acceptable?
-├─ YES (metrics, dashboards, telemetry)
-│  └─ At-Most-Once (fire-and-forget)
-│     Pros: Fastest, simplest
-│     Cons: Silent failures
-│
-└─ NO → Continue
-   Is duplicate processing acceptable?
-   ├─ YES (orders, audit logs, events)
-   │  └─ At-Least-Once + Idempotent Consumer
-   │     Pros: Durable, performant, handles duplicates gracefully
-   │     Cons: Need idempotency logic
-   │
-   └─ NO (payments, inventory, balances)
-      └─ Exactly-Once (Transactions + Idempotent Producer)
-         Pros: Strongest guarantee
-         Cons: 30-50% latency overhead, more complex
+    C -->|Yes| F["Use At-Least-Once<br/>+ Dual-Layer Dedup"]
+    C -->|No| G["Use Exactly-Once<br/>Transactions"]
+
+    H["Is latency critical<br/>< 100ms p99?"]
+    G -->|Yes| I["Exactly-Once is<br/>mandatory; accept<br/>20-50ms overhead"]
+    G -->|No| J["Still use At-Least-Once;<br/>idempotency is<br/>simpler than EOS"]
 ```
 
-**Step 3: Implement idempotency (if needed)**
+### Semantic by Use Case
 
-If you chose at-least-once or exactly-once, you need idempotent consumers. Pick your approach:
-- **Database unique constraint**: Simple, but a contention point at high throughput
-- **Redis cache + DB fallback**: Fast and scalable, requires Redis operations
-- **Dedicated dedup table**: Explicit and queryable, slightly slower than Redis
+| Use Case | Semantic | Rationale | Example |
+|----------|----------|-----------|---------|
+| **Payment Processing** | Exactly-Once | Duplicates are illegal; compliance requirement | Stripe, PayPal |
+| **Order Management** | At-Least-Once + Dedup | Orders have IDs; can detect duplicates easily | E-commerce, marketplaces |
+| **Financial Ledgers** | Exactly-Once | Accounting requires perfect accuracy | Banks, trading systems |
+| **User Analytics** | At-Most-Once | Duplicates break dashboard; loss is acceptable | Google Analytics, mixpanel |
+| **Inventory Tracking** | At-Least-Once + DB Constraint | Duplicates cause overselling; must be prevented | Warehouse systems |
+| **Real-time Dashboards** | At-Most-Once | Latency matters; 1% data loss is acceptable | Monitoring, APM |
+| **Event Sourcing** | At-Least-Once + Dedup | Duplicates don't change final state if idempotent | CQRS architectures |
+| **Compliance Audit Logs** | Exactly-Once | Regulatory requirement; no gaps or duplicates | Healthcare, financial audit |
 
-**Step 4: Configure and test**
+### The Hybrid Approach: Different Semantics for Different Topics
 
-- Set producer timeouts conservatively (not too short, not too long)
-- Set consumer commit intervals or use manual commits
-- Test the failure scenario: kill the consumer mid-processing, verify messages are redelivered
-- Monitor duplicate rates (should be <5% for normal networks)
+Advanced systems don't pick one semantic and use it everywhere. Instead, they segment by importance:
 
-**Step 5: Monitor in production**
+- **Critical topics** (payments, compliance): Exactly-once with transactional producers
+- **Important topics** (orders, inventory): At-least-once with dual-layer deduplication
+- **Nice-to-have topics** (analytics, metrics): At-most-once (acks=0)
 
-- Alert if offset lag exceeds expectations (indicates a stuck consumer)
-- Track duplicate detection rates (spikes indicate network issues)
-- Monitor transaction latency (if using exactly-once)
-- Set up reconciliation checks (compare source system counts to Kafka counts)
+This hybrid approach optimizes each part of the system for its actual requirements rather than over-engineering everything to the highest standard.
+
+---
+
+## Common Mistakes
+
+| Mistake | What Happens | Fix |
+|---------|-------------|-----|
+| **Using at-most-once for "speed"** | Data loss discovered too late; reconciliation gaps | Start with at-least-once; measure before optimizing |
+| **Forgetting to make consumer idempotent** | Duplicate processing causes duplicate inventory, charges, or records | Implement database unique constraint or dedup cache |
+| **Not handling dedup cache failures** | When Redis/cache goes down, duplicates slip through | Implement dual-layer approach with database fallback |
+| **Committing offset before processing completes** | Process crashes during write; message lost and never retried | Use manual acknowledgment; commit only after successful processing |
+| **Using exactly-once when at-least-once suffices** | Unnecessary latency/throughput loss; operational complexity | Audit actual requirements; at-least-once + idempotency is usually better |
+| **Assuming Kafka transactions work end-to-end** | Transactions only guarantee within Kafka; external systems still need idempotency | Combine Kafka transactions with idempotent external sinks |
+| **Not monitoring consumer lag and dedup rates** | Silent duplicates and reprocessing go unnoticed | Track: consumer lag, dedup cache hits, DLQ volume |
+| **DLQ without human process** | Messages rot in DLQ forever; data loss persists | Build alerting and manual review workflow for DLQ |
+
+---
+
+## Who Uses What in Production
+
+### Stripe: At-Least-Once + Idempotency Keys
+
+Stripe processes billions of events per day with at-least-once semantics. Every API request includes an idempotency key (UUID); if a duplicate arrives, the system returns the cached result instead of reprocessing. This approach scales to extreme throughput because:
+
+- No expensive distributed transactions
+- Idempotency keys are stored in a simple cache (Redis or similar)
+- Duplicates are detected and resolved in milliseconds
+
+Stripe's philosophy: idempotency is an API contract, not a Kafka feature. Clients are responsible for providing idempotency keys.
+
+### LinkedIn: Exactly-Once for Kafka Streams
+
+LinkedIn uses Kafka Streams with `processing.guarantee=exactly_once_v2` for critical data pipelines. They accept the latency and complexity trade-off because:
+
+- Exact counts matter for ranking and recommendation models
+- The downstream ML systems are sensitive to duplicates
+- They run large clusters where coordinator overhead is manageable
+
+However, even LinkedIn uses at-least-once + idempotency for non-critical pipelines.
+
+### Netflix: At-Least-Once with Dedup Service
+
+Netflix runs at-least-once delivery with a centralized deduplication service. All messages pass through a dedup layer (Redis with distributed fallback) before processing. This approach:
+
+- Handles millions of events per second
+- Catches duplicates before expensive processing
+- Provides visibility into dedup rates across the organization
+
+Netflix's philosophy: separate deduplication concerns from message processing.
 
 ---
 
 ## Interview Tip
 
-**Q: "Walk me through how you'd choose a delivery semantic for a payment processing system."**
+When asked "What delivery semantics should we use?" in an interview, avoid the trap of suggesting exactly-once universally. Instead, ask clarifying questions:
 
-**Senior/Principal Answer:**
+1. What's the impact of a duplicate message? (broken transactions vs. idempotent operations)
+2. What's the throughput requirement? (millions/sec vs. thousands/sec)
+3. What's the acceptable latency? (real-time vs. eventual consistency)
+4. Is the downstream sink idempotent? (can it handle duplicates safely?)
+5. What's the team's operational maturity? (distributed systems experience?)
 
-"I'd choose **exactly-once with transactional processing**. Here's my reasoning:
+Then recommend: **Start with at-least-once + idempotent consumers for 90% of systems.** Only escalate to exactly-once when you've measured that duplicates cause real harm that can't be handled idempotently, and you've accepted the performance trade-off.
 
-**Why not at-most-once:** We cannot afford silent data loss. If a customer's payment disappears from our system but their card was charged, we have a major problem: customer complaint, refund costs, regulatory questions.
-
-**Why not at-least-once:** A duplicate charge is worse than at-most-once loss because it's amplified harm. Customer gets double-charged, we get a chargeback, plus the service recovery cost. At-least-once with idempotent consumer would work technically, but for payments, I want the strongest guarantee the architecture can provide.
-
-**Exactly-Once implementation:**
-- Producer enables `enable.idempotence=true` and `transactional.id` per instance
-- Broker deduplicates based on producer ID + sequence number
-- Consumer uses `isolation.level=read_committed` to read only committed messages
-- Consumer wraps all processing in a database transaction with manual offset commit
-- Every payment includes a unique message ID in headers; consumer checks before processing
-- If consumer crashes mid-processing, offset doesn't commit and we replay
-
-**The trade-off:** This is about 30% slower than at-least-once (let's say 70k msgs/sec instead of 100k). But processing 1M payments/day means we need 50k msgs/sec sustained. 70k is comfortable headroom, so the latency cost is acceptable.
-
-**Monitoring:** We track three metrics:
-1. **Transaction latency**: Alert if p99 exceeds 500ms (indicates broker congestion)
-2. **Duplicate detection rate**: Track % of retries caught by idempotency check
-3. **Offset lag**: Alert if falling behind real-time (consumer is stuck)
-
-**Edge case:** What if the idempotency check database goes down? We pause consuming (don't process without dedup) rather than risk duplicates. Downtime is better than data corruption.
-
-This is the approach I'd use because the cost of a duplicate far exceeds the performance penalty."
+The architects who sound smartest aren't the ones who default to the strongest guarantees—they're the ones who choose the weakest guarantees that still solve the business problem.
 
 ---
 
-## References & Further Reading
+**Navigation:** [← 04 Kafka Configs](./04-kafka-configs.md) | [06 Kafka Performance →](./06-kafka-performance.md)
 
-- **Kafka Documentation**: Exactly-Once Semantics (https://kafka.apache.org/documentation/#semantics)
-- **Martin Kleppmann**: *Designing Data-Intensive Applications* (Chapter 11: Stream Processing)
-- **Spring Kafka**: Transactions and Exactly-Once Semantics
-- **RabbitMQ**: Reliability Guide (Durability and Acknowledgments)
-- **The Morning Paper**: Articles on distributed systems and consistency
+---
+
+## Sources
+
+- [Exactly-once Semantics is Possible: Here's How Apache Kafka Does it](https://www.confluent.io/blog/exactly-once-semantics-are-possible-heres-how-apache-kafka-does-it/)
+- [Build Idempotent Kafka Consumers: Patterns That Actually Work](https://www.conduktor.io/blog/building-idempotent-consumers)
+- [Exactly-Once vs At-Least-Once: Choosing Delivery Guarantees](https://streamkap.com/resources-and-guides/exactly-once-vs-at-least-once)
+- [Spring Kafka Exactly-Once Documentation](https://docs.spring.io/spring-kafka/reference/kafka/exactly-once.html)
+- [Idempotent Consumer Pattern](https://www.lydtechconsulting.com/blog-kafka-idempotent-consumer.html)
+- [Kafka Transactions and Transactional Producers](https://www.confluent.io/blog/transactions-apache-kafka/)
+- [Message Delivery Guarantees for Apache Kafka](https://docs.confluent.io/kafka/design/delivery-semantics.html)

@@ -1,8 +1,48 @@
 # Event-Driven Design: Core Principles
 
-Event-driven architecture represents a fundamental shift in how systems think about communication and state change. Rather than building tightly coupled request-response chains, we think in terms of *what happened* — immutable facts that multiple independent services can react to. These principles exist because they solve the hardest problems in distributed systems: coupling, consistency, and operational complexity.
+> "Decouple through immutable facts, not synchronous contracts. Async + idempotency + observability = reliable distributed systems."
 
-→ Back to [Event-Driven Design](./README.md)
+[← Back to Event-Driven Design](./README.md) | **Related:** [Messaging Options](./02-messaging-options.md) · [Delivery Semantics](./05-delivery-semantics.md)
+
+---
+
+## Quick Revision Mind Map
+
+```
+                           EVENT-DRIVEN PRINCIPLES
+                                    │
+                    ┌───────────────┬───────────────┐
+                    │               │               │
+              COMMUNICATION        DATA         CONSISTENCY
+              ──────────────    ──────────────  ────────────────
+              1. Async Comms   3. Immutability 5. Eventual
+                 decoupled       append-only      Consistency
+                 timing          facts            bounded
+                                                  propagation
+              2. Loose Coupling 4. Single      6. Event Ordering
+                 schema only      Responsibility  per-partition
+                 contract         one fact        guarantees
+                    │               │               │
+                    └───────────────┼───────────────┘
+                                    │
+                    ┌───────────────┬───────────────┐
+                    │               │               │
+               RESILIENCE       EVOLUTION       DECISION MATRIX
+               ──────────────  ────────────────  ─────────────
+               7. Idempotency  10. Schema       USE WHEN:
+                  same msg 2x     Versioning     → multi-service
+                  = same result   evolve           reactions
+                                  without        → independent
+               8. Observable      breaking         deploy
+                  Event Flow       consumers     → audit trail
+                  correlation IDs                 needed
+                  trace all
+                                 AVOID WHEN:
+               9. Backpressure    → strong
+                  graceful          consistency
+                  overload        → simple CRUD
+                  don't drop
+```
 
 ---
 
@@ -209,6 +249,8 @@ When a customer is granted premium status, the User Service publishes `CustomerU
 
 Requiring strong consistency means waiting for synchronous replication. Every write stalls until all replicas acknowledge. This kills throughput and latency. In a distributed system with network partitions, strong consistency can cause complete unavailability (you choose consistency over availability, per CAP theorem). Most systems need responsiveness more than they need guaranteed instantaneous consistency.
 
+📖 **Deep Dive:** See [Saga Pattern](./08-saga-pattern.md) for handling workflows that require coordinated state changes across multiple services with eventual consistency.
+
 ---
 
 ### 6. Event Ordering & Guarantees
@@ -236,6 +278,8 @@ In an inventory system, use Customer ID as the partition key. Customer A's event
 **What Breaks Without It**
 
 Without ordering, state machines break. A user's lifecycle might process `AccountDeleted` before `AccountCreated`. Payment might deduct funds before charging the card. Systems that assume order break silently and unpredictably. Without delivery semantics, you don't know if an event was lost (do we retry?) or duplicated (do we deduplicate?).
+
+📖 **Deep Dive:** See [Kafka Internals](./03-kafka-internals.md) for how partitions and offsets enforce ordering at scale.
 
 ---
 
@@ -272,6 +316,8 @@ ON DUPLICATE KEY UPDATE processed_at = NOW();
 **What Breaks Without It**
 
 Without idempotency, retries cause data corruption. Charging a customer twice. Creating duplicate records. Incrementing counters by 2 when only 1 event occurred. The system appears to work fine until a crash triggers a retry, and suddenly data is wrong. These bugs are insidious — they show up unpredictably during failures.
+
+📖 **Deep Dive:** See [Delivery Semantics](./05-delivery-semantics.md) for how at-least-once delivery makes idempotency essential.
 
 ---
 
@@ -342,6 +388,8 @@ while True:
 **What Breaks Without It**
 
 Without backpressure, high-load scenarios cause cascading failures. A spike in event production overwhelms consumers. They crash or drop events. Data is lost. The system becomes unreliable under exactly the conditions where reliability matters most.
+
+📖 **Deep Dive:** See [Kafka Performance](./06-kafka-performance.md) for tuning consumer lag, batch sizes, and throughput under sustained load.
 
 ---
 
@@ -706,3 +754,5 @@ Event Retention Policy:
 > You've now shown: understanding of fundamentals, judgment on when to apply patterns, awareness of real failure modes, and a concrete implementation technique. That's architect-level thinking.
 
 ---
+
+**Navigation:** [08 Saga Pattern ←](./08-saga-pattern.md) | [02 Messaging Options →](./02-messaging-options.md)

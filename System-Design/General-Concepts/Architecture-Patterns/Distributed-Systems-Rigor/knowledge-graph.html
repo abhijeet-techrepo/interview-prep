@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Distributed Systems Rigor — Knowledge Graph</title>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: #1e2d45;
+    --accent: #3b82f6;
+    --accent2: #8b5cf6;
+    --accent3: #10b981;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --mono: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    --sans: 'Sora', 'Inter', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+
+  /* Header */
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  .header-title { font-size: 16px; font-weight: 700; color: var(--accent); letter-spacing: -0.3px; }
+  .header-sub { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-top: 2px; }
+  .progress-bar { background: var(--border); border-radius: 8px; height: 6px; width: 160px; overflow: hidden; }
+  .progress-fill { background: linear-gradient(90deg, var(--accent3), var(--accent)); height: 100%; border-radius: 8px; transition: width 0.4s ease; }
+  .progress-label { font-size: 11px; color: var(--muted); font-family: var(--mono); text-align: right; margin-top: 4px; }
+
+  /* Layout */
+  .layout { display: grid; grid-template-columns: 260px 1fr; min-height: calc(100vh - 57px); }
+
+  /* Sidebar */
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 16px 0; overflow-y: auto; }
+  .sidebar-section { padding: 8px 16px 4px; font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 16px; cursor: pointer; transition: all 0.15s; border-left: 3px solid transparent; font-size: 13px; color: var(--muted); }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { border-left-color: var(--accent); background: rgba(59,130,246,0.08); color: var(--text); }
+  .nav-item.done { color: var(--accent3); }
+  .nav-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; transition: background 0.2s; }
+  .nav-item.done .nav-dot { background: var(--accent3); }
+  .nav-item.active .nav-dot { background: var(--accent); }
+  .nav-badge { font-size: 10px; font-family: var(--mono); background: var(--border); border-radius: 4px; padding: 1px 6px; margin-left: auto; }
+  .nav-badge.hard { background: rgba(239,68,68,0.15); color: var(--danger); }
+  .nav-badge.med { background: rgba(245,158,11,0.15); color: var(--warn); }
+
+  /* Main content */
+  .main { overflow-y: auto; }
+  .panel { display: none; padding: 32px 40px; max-width: 900px; }
+  .panel.active { display: block; }
+
+  /* Cards */
+  h1 { font-size: 24px; font-weight: 800; margin-bottom: 6px; }
+  .tagline { color: var(--muted); font-size: 14px; margin-bottom: 24px; font-style: italic; }
+  h2 { font-size: 16px; font-weight: 700; color: var(--accent); margin: 28px 0 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  h3 { font-size: 14px; font-weight: 700; margin: 20px 0 8px; color: var(--text); }
+  p { font-size: 14px; line-height: 1.7; color: #cbd5e1; margin-bottom: 12px; }
+
+  /* Code blocks */
+  pre { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-family: var(--mono); font-size: 12px; line-height: 1.6; overflow-x: auto; margin: 12px 0; color: #a8b2c0; }
+  code { font-family: var(--mono); font-size: 12px; background: rgba(59,130,246,0.1); padding: 2px 6px; border-radius: 4px; color: #93c5fd; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 16px 0; }
+  th { text-align: left; padding: 10px 12px; background: var(--surface2); color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: #cbd5e1; vertical-align: top; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  td:first-child { font-weight: 600; color: var(--text); white-space: nowrap; }
+
+  /* Pillars grid */
+  .pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 20px 0; }
+  .pillar-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 20px; cursor: pointer; transition: all 0.2s; }
+  .pillar-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .pillar-icon { font-size: 24px; margin-bottom: 10px; }
+  .pillar-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .pillar-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .pillar-card.idempotency { border-top: 3px solid var(--accent); }
+  .pillar-card.concurrency { border-top: 3px solid var(--accent2); }
+  .pillar-card.integrity { border-top: 3px solid var(--accent3); }
+
+  /* Callout boxes */
+  .callout { border-radius: 8px; padding: 14px 16px; margin: 16px 0; font-size: 13px; line-height: 1.6; }
+  .callout.info { background: rgba(59,130,246,0.08); border-left: 3px solid var(--accent); }
+  .callout.warn { background: rgba(245,158,11,0.08); border-left: 3px solid var(--warn); }
+  .callout.danger { background: rgba(239,68,68,0.08); border-left: 3px solid var(--danger); }
+  .callout.success { background: rgba(16,185,129,0.08); border-left: 3px solid var(--accent3); }
+  .callout-title { font-weight: 700; margin-bottom: 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .callout.info .callout-title { color: var(--accent); }
+  .callout.warn .callout-title { color: var(--warn); }
+  .callout.danger .callout-title { color: var(--danger); }
+  .callout.success .callout-title { color: var(--accent3); }
+
+  /* Interview cue cards */
+  .interview-card { background: linear-gradient(135deg, rgba(59,130,246,0.1), rgba(139,92,246,0.05)); border: 1px solid rgba(59,130,246,0.3); border-radius: 12px; padding: 20px; margin: 20px 0; }
+  .interview-card-label { font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .interview-card blockquote { font-size: 14px; line-height: 1.7; color: #cbd5e1; font-style: italic; }
+
+  /* Decision flow */
+  .decision-flow { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 20px; font-family: var(--mono); font-size: 12px; line-height: 2; color: #a8b2c0; margin: 16px 0; }
+  .decision-yes { color: var(--accent3); }
+  .decision-no { color: var(--danger); }
+  .decision-result { color: var(--warn); font-weight: 700; }
+
+  /* Quiz mode */
+  .quiz-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin: 16px 0; }
+  .quiz-q { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
+  .quiz-options { display: flex; flex-direction: column; gap: 8px; }
+  .quiz-option { padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 13px; transition: all 0.15s; }
+  .quiz-option:hover { border-color: var(--accent); }
+  .quiz-option.correct { border-color: var(--accent3); background: rgba(16,185,129,0.1); color: var(--accent3); }
+  .quiz-option.wrong { border-color: var(--danger); background: rgba(239,68,68,0.1); color: var(--danger); }
+  .quiz-explain { margin-top: 12px; font-size: 13px; color: var(--muted); display: none; }
+  .quiz-explain.show { display: block; }
+
+  /* Confidence buttons */
+  .confidence-row { display: flex; gap: 8px; margin-top: 16px; align-items: center; }
+  .confidence-label { font-size: 11px; color: var(--muted); }
+  .conf-btn { padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; transition: all 0.15s; font-family: var(--sans); }
+  .conf-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .conf-btn.active { font-weight: 600; }
+  .conf-btn.c1.active { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,0.1); }
+  .conf-btn.c2.active { border-color: var(--warn); color: var(--warn); background: rgba(245,158,11,0.1); }
+  .conf-btn.c3.active { border-color: var(--accent3); color: var(--accent3); background: rgba(16,185,129,0.1); }
+
+  /* Mark complete button */
+  .mark-done-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; transition: all 0.2s; font-family: var(--sans); margin-top: 24px; }
+  .mark-done-btn:hover { border-color: var(--accent3); color: var(--accent3); }
+  .mark-done-btn.done { border-color: var(--accent3); color: var(--accent3); background: rgba(16,185,129,0.1); }
+
+  /* Scenario cards */
+  .scenario { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin: 16px 0; }
+  .scenario-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .scenario-title { font-weight: 700; font-size: 15px; }
+  .difficulty { font-size: 11px; font-family: var(--mono); padding: 2px 8px; border-radius: 4px; }
+  .diff-3 { background: rgba(245,158,11,0.15); color: var(--warn); }
+  .diff-4 { background: rgba(239,68,68,0.15); color: var(--danger); }
+  .diff-2 { background: rgba(59,130,246,0.15); color: var(--accent); }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .layout { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .panel { padding: 20px; }
+    .pillars { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">Distributed Systems Rigor</div>
+    <div class="header-sub">Walmart Round 2 — Idempotency · Concurrency · Data Integrity</div>
+  </div>
+  <div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    <div class="progress-label" id="progressLabel">0 / 7 topics done</div>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-section">Overview</div>
+    <div class="nav-item active" onclick="showPanel('overview')">
+      <div class="nav-dot"></div>Overview & Decision Matrix
+    </div>
+
+    <div class="sidebar-section" style="margin-top:12px">Pillar 1: Idempotency</div>
+    <div class="nav-item" onclick="showPanel('idem-def')" id="nav-idem-def">
+      <div class="nav-dot"></div>Definition & Why It Matters
+    </div>
+    <div class="nav-item" onclick="showPanel('idem-patterns')" id="nav-idem-patterns">
+      <div class="nav-dot"></div>Patterns (Key, UNIQUE, SETNX)
+    </div>
+    <div class="nav-item" onclick="showPanel('idem-antipatterns')" id="nav-idem-antipatterns">
+      <div class="nav-dot"></div>Anti-Patterns <span class="nav-badge med">⚠</span>
+    </div>
+
+    <div class="sidebar-section" style="margin-top:12px">Pillar 2: Concurrency</div>
+    <div class="nav-item" onclick="showPanel('conc-races')" id="nav-conc-races">
+      <div class="nav-dot"></div>Race Condition Taxonomy
+    </div>
+    <div class="nav-item" onclick="showPanel('conc-locks')" id="nav-conc-locks">
+      <div class="nav-dot"></div>Optimistic vs Pessimistic
+    </div>
+    <div class="nav-item" onclick="showPanel('conc-distrib')" id="nav-conc-distrib">
+      <div class="nav-dot"></div>Distributed Locks & MVCC <span class="nav-badge hard">★</span>
+    </div>
+    <div class="nav-item" onclick="showPanel('conc-deadlock')" id="nav-conc-deadlock">
+      <div class="nav-dot"></div>Deadlock Prevention
+    </div>
+
+    <div class="sidebar-section" style="margin-top:12px">Pillar 3: Data Integrity</div>
+    <div class="nav-item" onclick="showPanel('di-acid')" id="nav-di-acid">
+      <div class="nav-dot"></div>ACID / BASE / CAP
+    </div>
+    <div class="nav-item" onclick="showPanel('di-isolation')" id="nav-di-isolation">
+      <div class="nav-dot"></div>Isolation Levels
+    </div>
+    <div class="nav-item" onclick="showPanel('di-saga')" id="nav-di-saga">
+      <div class="nav-dot"></div>Saga & 2PC <span class="nav-badge hard">★</span>
+    </div>
+    <div class="nav-item" onclick="showPanel('di-consistency')" id="nav-di-consistency">
+      <div class="nav-dot"></div>Consistency Models
+    </div>
+
+    <div class="sidebar-section" style="margin-top:12px">Walmart Scenarios</div>
+    <div class="nav-item" onclick="showPanel('sc-flash')" id="nav-sc-flash">
+      <div class="nav-dot"></div>Flash Sale Inventory <span class="nav-badge hard">★★</span>
+    </div>
+    <div class="nav-item" onclick="showPanel('sc-payment')" id="nav-sc-payment">
+      <div class="nav-dot"></div>Payment Safety
+    </div>
+    <div class="nav-item" onclick="showPanel('sc-saga')" id="nav-sc-saga">
+      <div class="nav-dot"></div>Order Saga (4 services) <span class="nav-badge hard">★★</span>
+    </div>
+
+    <div class="sidebar-section" style="margin-top:12px">Rapid Fire</div>
+    <div class="nav-item" onclick="showPanel('quiz')" id="nav-quiz">
+      <div class="nav-dot"></div>Interview Q&A Quiz
+    </div>
+  </nav>
+
+  <!-- Main panels -->
+  <main class="main">
+
+    <!-- OVERVIEW -->
+    <div class="panel active" id="panel-overview">
+      <h1>Distributed Systems Rigor</h1>
+      <p class="tagline">"Correctness under failure — Walmart's non-negotiable baseline"</p>
+
+      <div class="callout info">
+        <div class="callout-title">Round 2 Focus</div>
+        Walmart's distributed systems rigor round tests whether you can design systems that are correct not just when everything works, but specifically when things fail: retries happen, services crash, networks drop, clocks drift.
+      </div>
+
+      <h2>The Three Pillars</h2>
+      <div class="pillars">
+        <div class="pillar-card idempotency" onclick="showPanel('idem-def')">
+          <div class="pillar-icon">🔁</div>
+          <div class="pillar-title">Idempotency</div>
+          <div class="pillar-desc">Same operation, N times = same result. Makes retries safe. Essential for at-least-once delivery.</div>
+        </div>
+        <div class="pillar-card concurrency" onclick="showPanel('conc-races')">
+          <div class="pillar-icon">⚡</div>
+          <div class="pillar-title">Concurrency</div>
+          <div class="pillar-desc">Parallel writes, shared state. Prevent lost updates, dirty reads, write skew.</div>
+        </div>
+        <div class="pillar-card integrity" onclick="showPanel('di-acid')">
+          <div class="pillar-icon">🛡️</div>
+          <div class="pillar-title">Data Integrity</div>
+          <div class="pillar-desc">Cross-service consistency. ACID within service. Saga across services. Right consistency model for each use case.</div>
+        </div>
+      </div>
+
+      <h2>Master Decision Matrix</h2>
+      <table>
+        <tr><th>Problem</th><th>Pattern</th><th>Key Detail</th></tr>
+        <tr><td>Retry causes duplicate effect</td><td>Idempotency Key</td><td>Client UUID → server dedup table in same TX</td></tr>
+        <tr><td>Duplicate DB record on retry</td><td>UNIQUE constraint + ON CONFLICT</td><td>DB enforces atomically, no races</td></tr>
+        <tr><td>Cross-instance duplicate event</td><td>Redis SETNX with TTL</td><td>Always use Lua for atomic get-check-release</td></tr>
+        <tr><td>Lost update (low contention)</td><td>Optimistic locking</td><td>WHERE version = N; retry on 0 rows affected</td></tr>
+        <tr><td>Lost update (high contention)</td><td>SELECT FOR UPDATE</td><td>Keep TX short; use SKIP LOCKED for queues</td></tr>
+        <tr><td>Cross-service critical section</td><td>Redis distributed lock</td><td>Fencing token for GC pause safety</td></tr>
+        <tr><td>Distributed transaction</td><td>Saga + compensation</td><td>Orchestration for 3+ services</td></tr>
+        <tr><td>Strong read after write</td><td>Read-your-writes</td><td>Route to primary for N seconds post-write</td></tr>
+        <tr><td>Phantom read</td><td>Serializable isolation</td><td>Or explicit range locks</td></tr>
+        <tr><td>Write skew</td><td>Serializable or SELECT FOR UPDATE</td><td>Lock the constraint row, not just your row</td></tr>
+      </table>
+
+      <h2>The "Fail Frame" — Answer Structure</h2>
+      <div class="callout success">
+        <div class="callout-title">Always Answer in This Order</div>
+        1. <strong>Name the failure mode</strong> (lost update, duplicate delivery, partial commit)<br>
+        2. <strong>Name the pattern</strong> (optimistic lock, idempotency key, saga)<br>
+        3. <strong>Show implementation detail</strong> (schema, SQL, TTL)<br>
+        4. <strong>Acknowledge the trade-off</strong> (performance cost, eventual consistency window)<br>
+        5. <strong>State the monitoring signal</strong> (what metric, what alert)
+      </div>
+    </div>
+
+    <!-- IDEMPOTENCY: Definition -->
+    <div class="panel" id="panel-idem-def">
+      <h1>Idempotency — Definition & Why</h1>
+      <p class="tagline">f(f(x)) = f(x) — applying the same operation multiple times has the same effect as applying it once</p>
+
+      <h2>The Core Problem</h2>
+      <table>
+        <tr><th>Failure Scenario</th><th>What Causes Duplicate</th></tr>
+        <tr><td>Network timeout</td><td>Client retries → 2 requests hit server</td></tr>
+        <tr><td>Consumer crash after process</td><td>Re-reads same Kafka message after restart</td></tr>
+        <tr><td>Kafka at-least-once delivery</td><td>Rebalance during commit → reprocessed</td></tr>
+        <tr><td>Load balancer retry</td><td>Same request hits two instances</td></tr>
+        <tr><td>Client timeout + retry</td><td>Server processed first request; client sends again</td></tr>
+      </table>
+
+      <h2>Natural Idempotency (HTTP)</h2>
+      <table>
+        <tr><th>Method</th><th>Idempotent?</th><th>Why</th></tr>
+        <tr><td>GET</td><td>✅ Yes</td><td>Read-only, no state change</td></tr>
+        <tr><td>PUT</td><td>✅ Yes</td><td>Sets state to exact value; N calls = 1 call</td></tr>
+        <tr><td>DELETE</td><td>✅ Yes</td><td>Already-deleted → 204 (no-op)</td></tr>
+        <tr><td>POST</td><td>❌ No</td><td>Creates new resource each time</td></tr>
+        <tr><td>PATCH</td><td>❌ Usually No</td><td>Incremental changes (+10) are not idempotent</td></tr>
+      </table>
+
+      <div class="callout warn">
+        <div class="callout-title">Critical</div>
+        POST is how you create orders, payments, reservations. You must engineer idempotency into all POST endpoints.
+      </div>
+
+      <h2>The Partial Failure Problem</h2>
+      <pre>
+Sequence:
+  1. Charge card          → SUCCESS at gateway
+  2. Store in DB          → CRASH before commit
+  3. Client retries POST  → idempotency key not found (we crashed before storing it)
+  4. Charge card again    → DOUBLE CHARGE 💥
+
+Fix: Store idempotency key in SAME TRANSACTION as the DB write.
+     If we can't write to idempotency store, we can't guarantee safety → return 503.
+      </pre>
+
+      <div class="interview-card">
+        <div class="interview-card-label">💬 Ready-to-Say Answer</div>
+        <blockquote>"Idempotency is non-negotiable in distributed systems because retries are guaranteed — not optional. My pattern: client generates a UUID before the first attempt, sends it as an Idempotency-Key header, and the server stores the key→result mapping in the same DB transaction as the operation. On duplicate, return the cached result without re-executing. The critical edge case: if idempotency storage fails, fail the whole request. Better to reject than to risk double-processing."</blockquote>
+      </div>
+
+      <div class="confidence-row">
+        <span class="confidence-label">Confidence:</span>
+        <button class="conf-btn c1" onclick="setConf(this,'idem-def',1)">Shaky</button>
+        <button class="conf-btn c2" onclick="setConf(this,'idem-def',2)">Getting it</button>
+        <button class="conf-btn c3" onclick="setConf(this,'idem-def',3)">Got it</button>
+      </div>
+      <button class="mark-done-btn" id="done-idem-def" onclick="markDone('idem-def')">✓ Mark Complete</button>
+    </div>
+
+    <!-- IDEMPOTENCY: Patterns -->
+    <div class="panel" id="panel-idem-patterns">
+      <h1>Idempotency Patterns</h1>
+      <p class="tagline">Four patterns that cover 95% of real scenarios</p>
+
+      <h2>Pattern 1: Idempotency Key (Most Versatile)</h2>
+      <pre>
+Client: generates UUID once per logical operation (not per retry)
+Server: checks idempotency_keys table → if found, return cached result
+        if not found → process → store key + result in same TX
+
+Schema:
+  CREATE TABLE idempotency_keys (
+    idempotency_key VARCHAR(128) PRIMARY KEY,
+    operation       VARCHAR(64)  NOT NULL,
+    response_body   JSONB        NOT NULL,
+    expires_at      TIMESTAMP    NOT NULL  -- 7 days for payments, 24h for orders
+  );
+      </pre>
+
+      <h2>Pattern 2: DB UNIQUE Constraint (Simplest)</h2>
+      <pre>
+CREATE TABLE orders (
+  id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+  client_order_id  VARCHAR(128) UNIQUE NOT NULL,  ← dedup happens here
+  amount           DECIMAL(10,2),
+  ...
+);
+
+INSERT INTO orders (client_order_id, amount)
+VALUES ('client-ref-abc', 99.99)
+ON CONFLICT (client_order_id) DO NOTHING
+RETURNING *;
+
+→ First insert: creates order
+→ Duplicate: DB rejects silently, service returns existing order
+      </pre>
+
+      <h2>Pattern 3: Redis SETNX (Cross-instance)</h2>
+      <pre>
+SET event-{id} "processed" NX PX 86400000  -- NX=only if not exists, PX=TTL ms
+
+Result = OK   → first to process, proceed
+Result = NIL  → duplicate, skip
+
+⚠ GC Pause Problem: Lock expires while process is paused → two processors!
+Fix: Include fencing token in DB write:
+  UPDATE inventory SET qty = qty - 1, fence = 42
+  WHERE id = 123 AND fence < 42;
+      </pre>
+
+      <h2>Pattern 4: Conditional Update (State Guard)</h2>
+      <pre>
+UPDATE orders
+SET    status = 'PAID', paid_at = NOW()
+WHERE  id = 5001
+AND    status = 'PENDING';  ← guard: only transitions if in expected state
+
+rows_affected = 1 → success
+rows_affected = 0 → check if already PAID (idempotent) or in wrong state (error)
+      </pre>
+
+      <h2>TTL Selection Guide</h2>
+      <table>
+        <tr><th>Scenario</th><th>TTL</th><th>Reason</th></tr>
+        <tr><td>Payment processing</td><td>7 days</td><td>Business retry window for failed payments</td></tr>
+        <tr><td>Order creation</td><td>24 hours</td><td>Customer retry window</td></tr>
+        <tr><td>Kafka consumer events</td><td>48 hours</td><td>Covers max consumer lag scenarios</td></tr>
+        <tr><td>Flash sale inventory</td><td>1 hour</td><td>High throughput, short window</td></tr>
+        <tr><td>Supplier sync events</td><td>72 hours</td><td>Batch retry window for ETL</td></tr>
+      </table>
+
+      <div class="confidence-row">
+        <span class="confidence-label">Confidence:</span>
+        <button class="conf-btn c1" onclick="setConf(this,'idem-patterns',1)">Shaky</button>
+        <button class="conf-btn c2" onclick="setConf(this,'idem-patterns',2)">Getting it</button>
+        <button class="conf-btn c3" onclick="setConf(this,'idem-patterns',3)">Got it</button>
+      </div>
+      <button class="mark-done-btn" id="done-idem-patterns" onclick="markDone('idem-patterns')">✓ Mark Complete</button>
+    </div>
+
+    <!-- IDEMPOTENCY: Anti-patterns -->
+    <div class="panel" id="panel-idem-antipatterns">
+      <h1>Idempotency Anti-Patterns</h1>
+      <p class="tagline">The mistakes that cause silent data corruption</p>
+
+      <table>
+        <tr><th>Anti-Pattern</th><th>Why It Fails</th><th>Fix</th></tr>
+        <tr><td>Timestamp-based dedup</td><td>Clock skew: two events at "same" ms slip through</td><td>Use event UUID, never timestamp</td></tr>
+        <tr><td>Trusting "at-most-once"</td><td>All brokers eventually retry; you WILL get duplicates</td><td>Design for at-least-once always</td></tr>
+        <tr><td>No TTL on dedup store</td><td>Memory exhaustion / storage bloat</td><td>Explicit TTL + cleanup job</td></tr>
+        <tr><td>Check-then-insert without TX</td><td>Two threads both see "not exists", both insert</td><td>Use UNIQUE constraint or SETNX (atomic)</td></tr>
+        <tr><td>Mutable identifiers as key</td><td>Email can change, reference can be reused</td><td>Use immutable UUID generated at request time</td></tr>
+        <tr><td>Idempotency store in separate TX</td><td>Process but crash before store → duplicate on retry</td><td>Store key in SAME transaction as operation</td></tr>
+      </table>
+
+      <div class="callout danger">
+        <div class="callout-title">The Silent Killer</div>
+        Check-then-insert without atomicity: <code>SELECT → no row → INSERT</code><br>
+        Two concurrent threads BOTH see "no row" and BOTH insert. Race condition.<br>
+        Use <code>INSERT ON CONFLICT DO NOTHING</code> or <code>SET NX</code> — atomic by definition.
+      </div>
+
+      <button class="mark-done-btn" id="done-idem-antipatterns" onclick="markDone('idem-antipatterns')">✓ Mark Complete</button>
+    </div>
+
+    <!-- CONCURRENCY: Races -->
+    <div class="panel" id="panel-conc-races">
+      <h1>Race Condition Taxonomy</h1>
+      <p class="tagline">Name the failure mode before you prescribe the fix</p>
+
+      <table>
+        <tr><th>Race Type</th><th>What Happens</th><th>Example</th><th>Fix</th></tr>
+        <tr><td>Lost Update</td><td>A reads, B reads, A writes, B overwrites A</td><td>Both see qty=1, both deduct → qty=-1</td><td>Optimistic lock or SELECT FOR UPDATE</td></tr>
+        <tr><td>Dirty Read</td><td>Reads uncommitted data from another TX</td><td>Sees balance=0 from a TX that later rolled back</td><td>Read Committed isolation (min level)</td></tr>
+        <tr><td>Non-Repeatable Read</td><td>Same query returns different results in same TX</td><td>First read: PENDING, second read: CANCELLED</td><td>Repeatable Read isolation</td></tr>
+        <tr><td>Phantom Read</td><td>New rows appear mid-transaction</td><td>COUNT(*) returns 5 then 6 in same TX</td><td>Serializable isolation or range locks</td></tr>
+        <tr><td>Write Skew</td><td>Each TX valid individually; combined they violate constraint</td><td>2 doctors both see "2 on call" and both leave → 0 on call</td><td>Serializable or SELECT FOR UPDATE on constraint</td></tr>
+      </table>
+
+      <div class="callout warn">
+        <div class="callout-title">Write Skew — The Hardest to Spot</div>
+        No single write is wrong. Both transactions look valid in isolation. But the combined effect violates a system invariant. Classic signs: "at least N of X must exist" constraints, balance checks before debit, slot availability before booking.
+      </div>
+
+      <div class="confidence-row">
+        <span class="confidence-label">Confidence:</span>
+        <button class="conf-btn c1" onclick="setConf(this,'conc-races',1)">Shaky</button>
+        <button class="conf-btn c2" onclick="setConf(this,'conc-races',2)">Getting it</button>
+        <button class="conf-btn c3" onclick="setConf(this,'conc-races',3)">Got it</button>
+      </div>
+      <button class="mark-done-btn" id="done-conc-races" onclick="markDone('conc-races')">✓ Mark Complete</button>
+    </div>
+
+    <!-- CONCURRENCY: Locks -->
+    <div class="panel" id="panel-conc-locks">
+      <h1>Optimistic vs Pessimistic Locking</h1>
+      <p class="tagline">The most common concurrency control decision in senior interviews</p>
+
+      <h2>Decision Framework</h2>
+      <div class="decision-flow">
+        Is conflict frequent?
+          <span class="decision-no">NO  →</span> <span class="decision-result">OPTIMISTIC LOCKING</span> (version++)
+          <span class="decision-yes">YES →</span> Is operation short (&lt;50ms)?
+                  <span class="decision-yes">YES →</span> <span class="decision-result">PESSIMISTIC</span> (SELECT FOR UPDATE)
+                  <span class="decision-no">NO  →</span> <span class="decision-result">QUEUE-BASED SERIALIZATION</span>
+      </div>
+
+      <h2>Optimistic Locking</h2>
+      <pre>
+-- Read (no lock)
+SELECT qty, version FROM inventory WHERE sku = 'ITEM-X';
+-- Returns: qty=10, version=5
+
+-- Write (version check)
+UPDATE inventory
+SET    qty = 9, version = 6
+WHERE  sku = 'ITEM-X'
+AND    version = 5;        ← fails if someone else updated
+
+rows_affected = 1: success
+rows_affected = 0: conflict → retry with fresh read
+
+JPA: @Version annotation handles this automatically
+Spring: @Retryable(OptimisticLockException.class)
+      </pre>
+
+      <h2>Pessimistic Locking</h2>
+      <pre>
+BEGIN;
+SELECT qty FROM inventory
+WHERE  sku = 'ITEM-X'
+FOR UPDATE;              ← exclusive row lock; others BLOCK here
+
+-- safe to read/modify
+UPDATE inventory SET qty = qty - 1 WHERE sku = 'ITEM-X';
+COMMIT;                  ← lock released
+
+Variants:
+  FOR SHARE           → shared lock (reads OK, writes block)
+  FOR UPDATE NOWAIT   → fail immediately if locked (no waiting)
+  FOR UPDATE SKIP LOCKED → skip locked rows (job queue pattern)
+      </pre>
+
+      <h2>Skip Locked — Job Queue Pattern</h2>
+      <pre>
+-- Multiple workers pull orders without collision
+SELECT id, order_data FROM pending_orders
+WHERE status = 'QUEUED'
+LIMIT 10
+FOR UPDATE SKIP LOCKED;  ← only grab unlocked rows
+      </pre>
+
+      <table>
+        <tr><th>Dimension</th><th>Optimistic</th><th>Pessimistic</th></tr>
+        <tr><td>Contention level</td><td>Low — conflicts rare</td><td>High — conflicts frequent</td></tr>
+        <tr><td>Failure cost</td><td>Retry (cheap)</td><td>Wait (blocking)</td></tr>
+        <tr><td>Throughput</td><td>High (no lock overhead)</td><td>Lower (serialized)</td></tr>
+        <tr><td>Retry storm risk</td><td>Yes (high contention → storm)</td><td>No (wait in queue)</td></tr>
+        <tr><td>Best for</td><td>Profile updates, most CRUD</td><td>Flash sales, financial debits</td></tr>
+      </table>
+
+      <div class="confidence-row">
+        <span class="confidence-label">Confidence:</span>
+        <button class="conf-btn c1" onclick="setConf(this,'conc-locks',1)">Shaky</button>
+        <button class="conf-btn c2" onclick="setConf(this,'conc-locks',2)">Getting it</button>
+        <button class="conf-btn c3" onclick="setConf(this,'conc-locks',3)">Got it</button>
+      </div>
+      <button class="mark-done-btn" id="done-conc-locks" onclick="markDone('conc-locks')">✓ Mark Complete</button>
+    </div>
+
+    <!-- CONCURRENCY: Distributed -->
+    <div class="panel" id="panel-conc-distrib">
+      <h1>Distributed Locks & MVCC</h1>
+      <p class="tagline">When you need concurrency control across services or want reads to never block</p>
+
+      <h2>Redis Distributed Lock</h2>
+      <pre>
+// Acquire: SET key requestId NX PX 10000
+// Release (Lua — atomic check-and-delete):
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+else
+    return 0
+end
+
+Critical: Use your own requestId, not a static string.
+Otherwise Process A releases Process B's lock!
+      </pre>
+
+      <h2>⚠ The GC Pause Problem</h2>
+      <div class="callout danger">
+        <div class="callout-title">This Will Come Up</div>
+        1. Process A acquires lock, TTL = 30s<br>
+        2. Process A pauses for GC for 35s<br>
+        3. Lock expires<br>
+        4. Process B acquires lock, starts processing<br>
+        5. Process A resumes → BOTH in critical section!<br><br>
+        <strong>Fix:</strong> Fencing token — monotonically increasing counter returned with lock.<br>
+        DB write includes: <code>WHERE fence_token &lt; current_token</code> → stale writes rejected.
+      </div>
+
+      <h2>MVCC (Postgres/MySQL)</h2>
+      <pre>
+How it works:
+  - Each row has xmin (created by) and xmax (deleted by) transaction IDs
+  - SELECT sees rows where xmin ≤ snapshot AND xmax is null/future
+  - Writers create new versions; VACUUM cleans old ones
+  - Readers NEVER block writers; writers NEVER block readers
+
+Result: Long-running analytics queries don't block OLTP writes.
+
+Isolation levels and MVCC:
+  Read Committed   → snapshot at each statement (PG default)
+  Repeatable Read  → snapshot at transaction start (MySQL default)
+  Serializable     → full serializability (SSI in Postgres)
+      </pre>
+
+      <h2>ZooKeeper vs Redis for Locks</h2>
+      <table>
+        <tr><th>Dimension</th><th>Redis</th><th>ZooKeeper</th></tr>
+        <tr><td>Latency</td><td>~1ms</td><td>~5ms</td></tr>
+        <tr><td>Consistency model</td><td>AP (eventual)</td><td>CP (strict)</td></tr>
+        <tr><td>Lock expiry</td><td>TTL-based</td><td>Session-based (auto on crash)</td></tr>
+        <tr><td>Fairness</td><td>Not guaranteed</td><td>FIFO (sequential nodes)</td></tr>
+        <tr><td>Best for</td><td>Performance-critical coordination</td><td>Leader election, strict correctness</td></tr>
+      </table>
+
+      <div class="confidence-row">
+        <span class="confidence-label">Confidence:</span>
+        <button class="conf-btn c1" onclick="setConf(this,'conc-distrib',1)">Shaky</button>
+        <button class="conf-btn c2" onclick="setConf(this,'conc-distrib',2)">Getting it</button>
+        <button class="conf-btn c3" onclick="setConf(this,'conc-distrib',3)">Got it</button>
+      </div>
+      <button class="mark-done-btn" id="done-conc-distrib" onclick="markDone('conc-distrib')">✓ Mark Complete</button>
+    </div>
+
+    <!-- CONCURRENCY: Deadlocks -->
+    <div class="panel" id="panel-conc-deadlock">
+      <h1>Deadlock Prevention</h1>
+      <p class="tagline">Prevention is better than detection — design lock ordering upfront</p>
+
+      <h2>What Is a Deadlock?</h2>
+      <pre>
+TX A holds lock(Order #100), wants lock(Payment #200)
+TX B holds lock(Payment #200), wants lock(Order #100)
+→ Circular wait → both block forever
+      </pre>
+
+      <h2>Prevention Strategies</h2>
+      <h3>1. Consistent Lock Ordering (Best Practice)</h3>
+      <pre>
+// Always acquire locks in same order (ascending ID)
+Long first  = Math.min(orderId, paymentId);
+Long second = Math.max(orderId, paymentId);
+lock(first); lock(second);  // consistent order = no circular wait
+      </pre>
+
+      <h3>2. Lock Timeouts</h3>
+      <pre>
+SET innodb_lock_wait_timeout = 5;  -- MySQL
+SET lock_timeout = '5s';           -- Postgres
+-- Throws exception after timeout → retry with backoff
+      </pre>
+
+      <h3>3. Short Transactions</h3>
+      <pre>
+BAD:  BEGIN → external API call (200ms) → DB write → COMMIT  (lock held 200ms)
+GOOD: external API call → BEGIN → DB write → COMMIT           (lock held &lt;10ms)
+
+Lock hold time ∝ deadlock probability
+      </pre>
+
+      <h3>4. @Retryable on DeadlockLoserDataAccessException</h3>
+      <pre>
+@Retryable(
+  value = DeadlockLoserDataAccessException.class,
+  maxAttempts = 3,
+  backoff = @Backoff(delay = 100, multiplier = 1.5)
+)
+@Transactional
+public void processTransaction(Long id) { ... }
+      </pre>
+
+      <div class="interview-card">
+        <div class="interview-card-label">💬 Ready-to-Say</div>
+        <blockquote>"Deadlock prevention starts in design: always acquire locks in a consistent global order — e.g., always lock the lower entity ID first. And keep transactions short — the longer you hold a lock, the higher the deadlock probability. Modern databases detect deadlocks automatically and kill one transaction. At the application level, @Retryable on DeadlockLoserDataAccessException with exponential backoff handles the recovery."</blockquote>
+      </div>
+
+      <button class="mark-done-btn" id="done-conc-deadlock" onclick="markDone('conc-deadlock')">✓ Mark Complete</button>
+    </div>
+
+    <!-- DATA INTEGRITY: ACID/BASE/CAP -->
+    <div class="panel" id="panel-di-acid">
+      <h1>ACID / BASE / CAP</h1>
+      <p class="tagline">The theoretical foundations that every distributed systems interview probes</p>
+
+      <h2>ACID</h2>
+      <table>
+        <tr><th>Property</th><th>Meaning</th><th>Mechanism</th></tr>
+        <tr><td>Atomicity</td><td>All-or-nothing; no partial commits</td><td>WAL + rollback journal</td></tr>
+        <tr><td>Consistency</td><td>DB moves between valid states only</td><td>Constraints, foreign keys, CHECK</td></tr>
+        <tr><td>Isolation</td><td>Concurrent TXs appear to run serially</td><td>MVCC + locks + isolation levels</td></tr>
+        <tr><td>Durability</td><td>Committed data survives crashes</td><td>WAL flushed to disk before COMMIT ack</td></tr>
+      </table>
+
+      <h2>BASE</h2>
+      <table>
+        <tr><th>Letter</th><th>Meaning</th><th>Example</th></tr>
+        <tr><td>Basically Available</td><td>Available even during partial failure</td><td>Cassandra serves reads during partition</td></tr>
+        <tr><td>Soft State</td><td>State may change even without new input (replication lag)</td><td>Read replica 200ms behind primary</td></tr>
+        <tr><td>Eventually Consistent</td><td>All nodes converge given enough time</td><td>DynamoDB: consistent within seconds</td></tr>
+      </table>
+
+      <h2>CAP Theorem — Practical View</h2>
+      <pre>
+During a network partition, choose:
+  CP: Reject reads/writes to maintain consistency (ZooKeeper, etcd, HBase)
+  AP: Serve potentially stale data to remain available (Cassandra, DynamoDB)
+
+CA (no partition tolerance): Only on single node — not a distributed system.
+Always choose P. The real question: C or A when partition occurs?
+      </pre>
+
+      <table>
+        <tr><th>System</th><th>Type</th><th>Partition Behavior</th><th>Use When</th></tr>
+        <tr><td>ZooKeeper / etcd</td><td>CP</td><td>Stops serving until quorum restored</td><td>Leader election, config mgmt</td></tr>
+        <tr><td>Cassandra</td><td>AP</td><td>Serves stale data; syncs later</td><td>Social feeds, user prefs</td></tr>
+        <tr><td>DynamoDB</td><td>AP (default)</td><td>Eventually consistent reads</td><td>Shopping cart, sessions</td></tr>
+        <tr><td>PostgreSQL (single)</td><td>CA*</td><td>N/A (single node)</td><td>OLTP, financial data</td></tr>
+      </table>
+
+      <div class="interview-card">
+        <div class="interview-card-label">💬 CAP in One Line</div>
+        <blockquote>"CAP means: during a network partition, you choose between consistency (refuse to answer) or availability (answer with possibly stale data). I choose the consistency model that matches the business requirement — strong for checkout and payments, eventual for browsing and analytics."</blockquote>
+      </div>
+
+      <div class="confidence-row">
+        <span class="confidence-label">Confidence:</span>
+        <button class="conf-btn c1" onclick="setConf(this,'di-acid',1)">Shaky</button>
+        <button class="conf-btn c2" onclick="setConf(this,'di-acid',2)">Getting it</button>
+        <button class="conf-btn c3" onclick="setConf(this,'di-acid',3)">Got it</button>
+      </div>
+      <button class="mark-done-btn" id="done-di-acid" onclick="markDone('di-acid')">✓ Mark Complete</button>
+    </div>
+
+    <!-- DATA INTEGRITY: Isolation -->
+    <div class="panel" id="panel-di-isolation">
+      <h1>Isolation Levels</h1>
+      <p class="tagline">How much "bleeding" is permitted between concurrent transactions</p>
+
+      <table>
+        <tr><th>Level</th><th>Dirty Read</th><th>Non-Repeatable</th><th>Phantom</th><th>Write Skew</th><th>Notes</th></tr>
+        <tr><td>Read Uncommitted</td><td>❌ Possible</td><td>❌</td><td>❌</td><td>❌</td><td>Never use</td></tr>
+        <tr><td><strong>Read Committed</strong></td><td>✅ Safe</td><td>❌ Possible</td><td>❌</td><td>❌</td><td><strong>Postgres default</strong></td></tr>
+        <tr><td><strong>Repeatable Read</strong></td><td>✅</td><td>✅ Safe</td><td>✅ in PG</td><td>❌</td><td><strong>MySQL default</strong></td></tr>
+        <tr><td><strong>Serializable</strong></td><td>✅</td><td>✅</td><td>✅</td><td>✅ Safe</td><td>Slowest; use for financials</td></tr>
+      </table>
+
+      <h2>Walmart Guidance</h2>
+      <table>
+        <tr><th>Scenario</th><th>Level</th><th>Reason</th></tr>
+        <tr><td>Inventory deduction</td><td>Repeatable Read</td><td>Prevent phantom inserts during count check</td></tr>
+        <tr><td>Payment processing</td><td>Serializable</td><td>Prevent write skew on concurrent payments</td></tr>
+        <tr><td>Analytics reads</td><td>Read Committed</td><td>Performance &gt; consistency</td></tr>
+        <tr><td>User profile updates</td><td>Read Committed</td><td>Low contention, retries OK</td></tr>
+        <tr><td>Doctor-on-call scheduling</td><td>Serializable</td><td>Write skew would violate business invariant</td></tr>
+      </table>
+
+      <button class="mark-done-btn" id="done-di-isolation" onclick="markDone('di-isolation')">✓ Mark Complete</button>
+    </div>
+
+    <!-- DATA INTEGRITY: Saga -->
+    <div class="panel" id="panel-di-saga">
+      <h1>Saga Pattern & 2PC</h1>
+      <p class="tagline">How to do distributed transactions without the 2PC nightmare</p>
+
+      <h2>2PC — The Classic (Mostly Avoid)</h2>
+      <pre>
+Phase 1: Coordinator sends PREPARE to all participants
+         Each participant: "CAN you commit?" → YES or NO
+
+Phase 2: If ALL YES → COMMIT
+         If ANY NO  → ROLLBACK
+
+Problems:
+  ❌ Blocking: if coordinator crashes after PREPARE, participants stuck forever
+  ❌ Coordinator SPOF
+  ❌ Network partition during Phase 2 → some commit, some don't
+
+When to use: Single external system (1 DB + 1 payment gateway), tolerate blocking.
+             NOT for microservices with 3+ services.
+      </pre>
+
+      <h2>Saga — The Modern Answer</h2>
+      <pre>
+Each step = local transaction + event
+Failure at step N → compensating transactions for steps 1..N-1
+
+Happy Path:
+  reserve inventory  → charge payment  → create shipment  → send email
+
+Failure at step 3 (shipping):
+  undo step 2: refund payment (idempotent)
+  undo step 1: release inventory reservation (idempotent)
+  cancel order: notify customer
+
+State persisted in DB — saga survives orchestrator crash and resumes.
+      </pre>
+
+      <h2>Compensating Transaction Rules</h2>
+      <table>
+        <tr><th>Step</th><th>Forward</th><th>Compensation</th></tr>
+        <tr><td>1</td><td>reserve inventory</td><td>release reservation</td></tr>
+        <tr><td>2</td><td>charge payment</td><td>refund payment</td></tr>
+        <tr><td>3</td><td>create shipment</td><td>cancel shipment</td></tr>
+        <tr><td>4</td><td>send email</td><td>send cancellation email</td></tr>
+      </table>
+
+      <div class="callout warn">
+        <div class="callout-title">Compensation Must Be Idempotent</div>
+        If the saga fails mid-compensation, it will retry the compensation. <code>refund(orderId)</code> must check "already refunded?" before executing.
+      </div>
+
+      <h2>When Compensation Also Fails</h2>
+      <div class="callout danger">
+        <div class="callout-title">The Hardest Follow-up</div>
+        Answer: Retry with backoff → after N failures → saga moves to STUCK state → oncall paged → DLQ captures context → manual intervention possible.<br><br>
+        Key: "The system is noisily stuck, not silently corrupted."
+      </div>
+
+      <div class="interview-card">
+        <div class="interview-card-label">💬 Ready-to-Say on 2PC vs Saga</div>
+        <blockquote>"2PC is rarely worth the operational cost in microservices — the coordinator becomes a SPOF and the protocol is blocking. I prefer saga with compensating transactions: each step publishes an event, failure triggers compensation in reverse order. With saga, I trade atomic commits for availability, which is acceptable with good monitoring — stuck sagas alert within 15 minutes, far before customers notice."</blockquote>
+      </div>
+
+      <div class="confidence-row">
+        <span class="confidence-label">Confidence:</span>
+        <button class="conf-btn c1" onclick="setConf(this,'di-saga',1)">Shaky</button>
+        <button class="conf-btn c2" onclick="setConf(this,'di-saga',2)">Getting it</button>
+        <button class="conf-btn c3" onclick="setConf(this,'di-saga',3)">Got it</button>
+      </div>
+      <button class="mark-done-btn" id="done-di-saga" onclick="markDone('di-saga')">✓ Mark Complete</button>
+    </div>
+
+    <!-- DATA INTEGRITY: Consistency Models -->
+    <div class="panel" id="panel-di-consistency">
+      <h1>Consistency Models</h1>
+      <p class="tagline">What "consistent" means depends on the use case</p>
+
+      <table>
+        <tr><th>Model</th><th>Guarantee</th><th>Cost</th><th>Use At Walmart</th></tr>
+        <tr><td><strong>Strong</strong></td><td>Every read = latest write (from any node)</td><td>High latency; all reads via primary</td><td>Checkout price, inventory deduction</td></tr>
+        <tr><td><strong>Eventual</strong></td><td>All nodes converge given time with no writes</td><td>Stale reads during replication window</td><td>Product catalog, browsing, analytics</td></tr>
+        <tr><td><strong>Causal</strong></td><td>If A → B causally, everyone sees A before B</td><td>Moderate</td><td>Comments/replies, document chains</td></tr>
+        <tr><td><strong>Read-your-writes</strong></td><td>After you write, your reads reflect it</td><td>Route reads to primary for N sec post-write</td><td>Order confirmation, profile update</td></tr>
+        <tr><td><strong>Monotonic reads</strong></td><td>Never see older version after seeing newer</td><td>Pin to same replica</td><td>Order status tracking</td></tr>
+      </table>
+
+      <h2>Read-Your-Writes Implementation</h2>
+      <pre>
+Problem: Order placed, customer redirected to confirmation page.
+Page reads from replica. Replica hasn't synced yet → "Order Not Found".
+
+Fix:
+  1. After POST /orders → store write_timestamp in session cookie
+  2. GET /orders/{id} passes timestamp header
+  3. Backend: if replica_lag > 0, route to primary for 5 seconds
+  4. After 5 seconds: replica synced, normal routing resumes
+      </pre>
+
+      <div class="callout success">
+        <div class="callout-title">The Split Consistency Pattern</div>
+        Use different consistency models for different operations in the same system:<br>
+        • <strong>Display price</strong>: eventual (regional CDN cache, fast, OK to be 30s stale)<br>
+        • <strong>Checkout price</strong>: strong (primary DB, accurate at moment of purchase)<br>
+        This avoids making the primary a bottleneck for catalog browsing.
+      </div>
+
+      <button class="mark-done-btn" id="done-di-consistency" onclick="markDone('di-consistency')">✓ Mark Complete</button>
+    </div>
+
+    <!-- SCENARIO: Flash Sale -->
+    <div class="panel" id="panel-sc-flash">
+      <h1>Scenario: Flash Sale Inventory</h1>
+      <p class="tagline">50,000 concurrent users, 500 items, zero overselling</p>
+
+      <div class="scenario">
+        <div class="scenario-header">
+          <div class="scenario-title">"Design inventory deduction for Black Friday flash sale"</div>
+          <div class="difficulty diff-4">⭐⭐ Hard</div>
+        </div>
+
+        <h3>Name the Failure Modes</h3>
+        <pre>
+1. Lost Update: A reads qty=1, B reads qty=1, both deduct → qty=-1 (oversold)
+2. Duplicate Deduction: User retries after timeout → deducts twice
+3. Thundering Herd: 50k connections lock same DB row → collapse
+        </pre>
+
+        <h3>Three-Tier Solution</h3>
+        <pre>
+Tier 1: Redis DECR (absorb traffic, fast)
+  SET inv:ITEM-X 500
+  result = DECR inv:ITEM-X
+  if result >= 0: emit RESERVATION_CLAIMED to Kafka
+  if result < 0:  return 409 "Sold Out"; INCR inv:ITEM-X
+
+Tier 2: Kafka Consumer → DB (durable)
+  BEGIN TX
+    INSERT INTO reservations (purchase_req_id, sku)
+    ON CONFLICT (purchase_req_id) DO NOTHING   ← idempotency
+    UPDATE inventory SET qty = qty - 1 WHERE sku = 'ITEM-X' AND qty > 0
+  COMMIT
+
+Tier 3: Reconciliation Job (correctness)
+  Every 60s: compare Redis count vs DB count
+  If drift > threshold: alert + sync
+        </pre>
+
+        <h3>Trade-offs to State</h3>
+        <table>
+          <tr><th>Decision</th><th>Risk</th></tr>
+          <tr><td>Redis as fast path</td><td>Redis restart loses in-flight → Kafka+DB are source of truth</td></tr>
+          <tr><td>Kafka buffer</td><td>Consumer lag → reservation confirmed but DB not yet updated → monitor lag</td></tr>
+          <tr><td>Not using SELECT FOR UPDATE</td><td>Avoids lock contention at 50k RPS; drift caught by reconciliation</td></tr>
+        </table>
+      </div>
+
+      <button class="mark-done-btn" id="done-sc-flash" onclick="markDone('sc-flash')">✓ Mark Complete</button>
+    </div>
+
+    <!-- SCENARIO: Payment -->
+    <div class="panel" id="panel-sc-payment">
+      <h1>Scenario: Payment Safety</h1>
+      <p class="tagline">Customer double-clicks Pay. Charge once. Refund once.</p>
+
+      <div class="scenario">
+        <div class="scenario-header">
+          <div class="scenario-title">"How do you guarantee a customer isn't charged twice on retry?"</div>
+          <div class="difficulty diff-3">⭐ Medium</div>
+        </div>
+
+        <h3>Charge Idempotency</h3>
+        <pre>
+Frontend: Generate idempotency_key = UUID on page load (not on click)
+          Include as header: Idempotency-Key: uuid-abc
+
+Backend:
+  BEGIN TX
+    SELECT from idempotency_keys WHERE key = 'uuid-abc' FOR UPDATE
+    IF found: COMMIT; return cached_response
+
+    result = payment_gateway.charge(amount, card, idempotency_key='uuid-abc')
+    INSERT INTO idempotency_keys (key, response, expires_at) VALUES (...)
+    INSERT INTO payments (order_id, charge_id, amount)
+  COMMIT
+
+⚠ Both inserts in same TX: if charge succeeds but TX fails, next retry
+  finds no idempotency key → would charge again.
+  Solution: gateway idempotency_key ensures gateway also deduplicates.
+        </pre>
+
+        <h3>Ambiguous Gateway Response (Timeout / 5xx)</h3>
+        <pre>
+DO NOT assume failure. DO NOT retry immediately.
+
+1. Store payment status = 'UNCERTAIN'
+2. Async job: query gateway using original reference_id
+3. Update based on authoritative answer:
+   - CHARGED → fulfill order
+   - NOT_CHARGED → mark FAILED, notify customer
+
+This prevents both double-charge (don't retry) and lost order (don't assume failure).
+        </pre>
+      </div>
+
+      <button class="mark-done-btn" id="done-sc-payment" onclick="markDone('sc-payment')">✓ Mark Complete</button>
+    </div>
+
+    <!-- SCENARIO: Saga -->
+    <div class="panel" id="panel-sc-saga">
+      <h1>Scenario: Order Saga (4 Services)</h1>
+      <p class="tagline">Walk through a distributed transaction and its failure recovery</p>
+
+      <div class="scenario">
+        <div class="scenario-header">
+          <div class="scenario-title">"Payment charged, shipping fails at step 3. What happens?"</div>
+          <div class="difficulty diff-4">⭐⭐ Hard</div>
+        </div>
+
+        <h3>Happy Path</h3>
+        <pre>
+OrderSaga.start(orderId)
+  1. InventoryService.reserve(orderId, items)         → InventoryReserved
+  2. PaymentService.charge(orderId, amount)            → PaymentCharged
+  3. ShippingService.createShipment(orderId)           → ShipmentCreated
+  4. NotificationService.sendConfirmation(orderId)     → OrderConfirmed
+        </pre>
+
+        <h3>Failure at Step 3 (Shipping)</h3>
+        <pre>
+ShipmentFailed event received by saga:
+  Compensate step 2: PaymentService.refund(orderId)
+    → checks: not yet refunded? → refund → mark REFUNDED
+  Compensate step 1: InventoryService.release(orderId)
+    → checks: not yet released? → increment qty → mark RELEASED
+  OrderService.cancel(orderId)
+  → Customer notified: "Sorry, shipping unavailable"
+        </pre>
+
+        <h3>When Compensation Fails</h3>
+        <pre>
+Retry with exponential backoff (3 attempts)
+If still failing → saga.status = COMPENSATION_FAILED
+→ Alert fires → oncall paged → DLQ captures context
+→ Manual intervention: engineer processes refund directly
+
+Key point: "Noisily stuck, not silently corrupt"
+        </pre>
+
+        <h3>Saga State Persistence</h3>
+        <pre>
+CREATE TABLE saga_state (
+  saga_id     VARCHAR(128) PRIMARY KEY,
+  current_step VARCHAR(64),
+  status       VARCHAR(32),  -- IN_PROGRESS, COMPLETED, COMPENSATING, STUCK
+  payload      JSONB,
+  last_updated TIMESTAMP
+);
+
+Monitoring: SELECT * FROM saga_state
+            WHERE status IN ('IN_PROGRESS','COMPENSATING')
+            AND last_updated < NOW() - INTERVAL 30 MINUTE;
+→ Alert threshold: > 0 rows for > 5 minutes
+        </pre>
+      </div>
+
+      <button class="mark-done-btn" id="done-sc-saga" onclick="markDone('sc-saga')">✓ Mark Complete</button>
+    </div>
+
+    <!-- QUIZ -->
+    <div class="panel" id="panel-quiz">
+      <h1>Interview Q&A Quiz</h1>
+      <p class="tagline">Common follow-ups in Walmart distributed systems interviews</p>
+
+      <div class="quiz-card" id="q1">
+        <div class="quiz-q">Q: Why store the idempotency key in the same transaction as the operation?</div>
+        <div class="quiz-options">
+          <div class="quiz-option" onclick="answer(this,'q1','wrong')">For performance — batching reduces round trips</div>
+          <div class="quiz-option" onclick="answer(this,'q1','correct')">If we process but crash before storing the key, the next retry has no record and processes again — causing a duplicate</div>
+          <div class="quiz-option" onclick="answer(this,'q1','wrong')">So the key expires at the same time as the operation record</div>
+        </div>
+        <div class="quiz-explain" id="exp-q1">✅ Correct: Partial failures (process but not store) are the core danger. Same TX = atomicity. Either both happen or neither does.</div>
+      </div>
+
+      <div class="quiz-card" id="q2">
+        <div class="quiz-q">Q: When would you choose pessimistic locking over optimistic?</div>
+        <div class="quiz-options">
+          <div class="quiz-option" onclick="answer(this,'q2','wrong')">Always — it's simpler to implement</div>
+          <div class="quiz-option" onclick="answer(this,'q2','wrong')">Never — optimistic is always faster</div>
+          <div class="quiz-option" onclick="answer(this,'q2','correct')">When contention is high and retry cost/storm risk outweighs the blocking cost of holding a lock</div>
+        </div>
+        <div class="quiz-explain" id="exp-q2">✅ Correct: High contention → optimistic causes retry storms. Flash sale inventory is the canonical example where pessimistic (or queue-based) wins.</div>
+      </div>
+
+      <div class="quiz-card" id="q3">
+        <div class="quiz-q">Q: What's the GC pause problem with Redis distributed locks?</div>
+        <div class="quiz-options">
+          <div class="quiz-option" onclick="answer(this,'q3','wrong')">Redis GC pauses the key store, causing lock timeouts</div>
+          <div class="quiz-option" onclick="answer(this,'q3','correct')">The JVM process holding the lock pauses for GC, the lock TTL expires, another process acquires the lock, and then both processes are in the critical section simultaneously</div>
+          <div class="quiz-option" onclick="answer(this,'q3','wrong')">GC deletes Redis keys before TTL expires</div>
+        </div>
+        <div class="quiz-explain" id="exp-q3">✅ Correct: Fix with a fencing token — monotonically increasing counter returned with lock. DB writes include WHERE fence &lt; token, so stale writers are rejected.</div>
+      </div>
+
+      <div class="quiz-card" id="q4">
+        <div class="quiz-q">Q: What's write skew and how do you fix it?</div>
+        <div class="quiz-options">
+          <div class="quiz-option" onclick="answer(this,'q4','wrong')">When two writes conflict and one is lost — fixed with optimistic locking</div>
+          <div class="quiz-option" onclick="answer(this,'q4','correct')">When each transaction reads valid state and makes a valid write, but together they violate a system invariant — fixed with Serializable isolation or SELECT FOR UPDATE on the constraint</div>
+          <div class="quiz-option" onclick="answer(this,'q4','wrong')">When a write is made to a stale read — fixed with Read Committed isolation</div>
+        </div>
+        <div class="quiz-explain" id="exp-q4">✅ Correct: Classic example: 2 doctors both see "2 on call" and both leave. Each write is valid; together they break "at least 1 on call." Fix: SELECT FOR UPDATE on the scheduling table, or Serializable isolation.</div>
+      </div>
+
+      <div class="quiz-card" id="q5">
+        <div class="quiz-q">Q: Why is 2PC usually the wrong choice for microservices?</div>
+        <div class="quiz-options">
+          <div class="quiz-option" onclick="answer(this,'q5','wrong')">It requires XA drivers which don't exist for most languages</div>
+          <div class="quiz-option" onclick="answer(this,'q5','correct')">The coordinator is a SPOF, the protocol is blocking (participants stuck if coordinator crashes after PREPARE), and it performs poorly at high load</div>
+          <div class="quiz-option" onclick="answer(this,'q5','wrong')">2PC doesn't support ACID transactions across services</div>
+        </div>
+        <div class="quiz-explain" id="exp-q5">✅ Correct: Use Saga instead. Trades atomic commits for availability, which is acceptable with proper compensation and monitoring.</div>
+      </div>
+
+      <div class="quiz-card" id="q6">
+        <div class="quiz-q">Q: What happens if a saga's compensating transaction also fails?</div>
+        <div class="quiz-options">
+          <div class="quiz-option" onclick="answer(this,'q6','wrong')">The saga rolls back to the beginning automatically</div>
+          <div class="quiz-option" onclick="answer(this,'q6','wrong')">The system accepts the inconsistency as a known trade-off</div>
+          <div class="quiz-option" onclick="answer(this,'q6','correct')">Retry with backoff → saga enters STUCK/COMPENSATION_FAILED state → alert fires → oncall intervenes → DLQ captures context for manual replay</div>
+        </div>
+        <div class="quiz-explain" id="exp-q6">✅ Correct: The key insight: "noisily stuck, not silently corrupt." The system always knows what happened; humans can intervene. This is far better than silent inconsistency.</div>
+      </div>
+
+    </div>
+
+  </main>
+</div>
+
+<script>
+  // State
+  const STORAGE_KEY = 'wmt-ds-rigor-progress';
+  let state = {};
+  try { state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch(e) {}
+
+  const TOTAL_TOPICS = 7;
+  const DONE_TOPICS = ['idem-def','idem-patterns','conc-races','conc-locks','conc-distrib','di-acid','di-saga'];
+
+  function saveState() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+  }
+
+  function updateProgress() {
+    const done = DONE_TOPICS.filter(t => state['done_' + t]).length;
+    const pct = Math.round((done / TOTAL_TOPICS) * 100);
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressLabel').textContent = done + ' / ' + TOTAL_TOPICS + ' topics done';
+    DONE_TOPICS.forEach(t => {
+      const navEl = document.getElementById('nav-' + t);
+      if (navEl) {
+        navEl.classList.toggle('done', !!state['done_' + t]);
+      }
+    });
+  }
+
+  function showPanel(id) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    const panel = document.getElementById('panel-' + id);
+    if (panel) panel.classList.add('active');
+    const nav = document.getElementById('nav-' + id) || document.querySelector('[onclick="showPanel(\'' + id + '\')"]');
+    if (nav) nav.classList.add('active');
+    window.scrollTo(0, 0);
+    const mainEl = document.querySelector('.main');
+    if (mainEl) mainEl.scrollTop = 0;
+    // Restore confidence buttons
+    const conf = state['conf_' + id];
+    if (conf) {
+      document.querySelectorAll(`#panel-${id} .conf-btn`).forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.classList.contains('c' + conf)) btn.classList.add('active');
+      });
+    }
+    // Restore done button
+    const doneBtn = document.getElementById('done-' + id);
+    if (doneBtn && state['done_' + id]) {
+      doneBtn.classList.add('done');
+      doneBtn.textContent = '✓ Completed';
+    }
+  }
+
+  function markDone(id) {
+    state['done_' + id] = true;
+    saveState();
+    updateProgress();
+    const btn = document.getElementById('done-' + id);
+    if (btn) { btn.classList.add('done'); btn.textContent = '✓ Completed'; }
+  }
+
+  function setConf(btn, id, level) {
+    const panel = document.getElementById('panel-' + id);
+    if (panel) panel.querySelectorAll('.conf-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state['conf_' + id] = level;
+    if (level === 3) markDone(id);
+    saveState();
+  }
+
+  function answer(el, qid, result) {
+    const card = document.getElementById(qid);
+    card.querySelectorAll('.quiz-option').forEach(o => {
+      o.onclick = null;
+      o.style.cursor = 'default';
+    });
+    el.classList.add(result);
+    const exp = document.getElementById('exp-' + qid);
+    if (exp) exp.classList.add('show');
+  }
+
+  // Init
+  updateProgress();
+  // Restore active state for overview
+  document.querySelector('[onclick="showPanel(\'overview\')"]').classList.add('active');
+</script>
+</body>
+</html>
